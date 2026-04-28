@@ -233,30 +233,144 @@ const INV_LINES=()=>[
 ];
 
 const SAMPLE_POS=[
-  {id:'PO-001',customer:'Acme Electrical',cpo:'AE-2024-881',rcvd:'2025-03-01',due:'2025-04-15',so:'SO-1041',wo:'WO-3301',cin7:true,fb:true,notes:'',
+  {id:'PO-001',customer:'Acme Electrical',cpo:'AE-2024-881',rcvd:'2025-03-01',due:'2025-04-15',so:'SO-1041',wo:'WO-3301',cin7:true,fb:true,inherited:true,commitDate:'',notes:'',
    lines:[
     {id:'L1',desc:'14 AWG wire harness assembly',qty:10,unit:'ea',unitPrice:320,shipped:[{date:'2025-03-20',qty:6,inv:'INV-9201'},{date:'2025-04-10',qty:2,inv:''}]},
     {id:'L2',desc:'16 AWG pigtail assembly',qty:5,unit:'ea',unitPrice:180,shipped:[{date:'2025-03-20',qty:5,inv:'INV-9201'}]},
   ]},
-  {id:'PO-002',customer:'Northwest Auto Group',cpo:'NW-044',rcvd:'2025-03-10',due:'2025-05-01',so:'SO-1045',wo:'WO-3308',cin7:true,fb:true,notes:'',
+  {id:'PO-002',customer:'Northwest Auto Group',cpo:'NW-044',rcvd:'2025-03-10',due:'2025-05-01',so:'SO-1045',wo:'WO-3308',cin7:true,fb:true,inherited:true,commitDate:'',notes:'',
    lines:[
     {id:'L1',desc:'Auto wire harness — model A',qty:8,unit:'ea',unitPrice:410,shipped:[{date:'2025-04-05',qty:3,inv:''}]},
     {id:'L2',desc:'Auto wire harness — model B',qty:4,unit:'ea',unitPrice:390,shipped:[]},
   ]},
-  {id:'PO-003',customer:'Cascade Controls',cpo:'CC-2025-07',rcvd:'2025-03-18',due:'2025-04-28',so:'SO-1049',wo:'',cin7:true,fb:false,notes:'',
+  {id:'PO-003',customer:'Cascade Controls',cpo:'CC-2025-07',rcvd:'2025-03-18',due:'2025-04-28',so:'SO-1049',wo:'',cin7:true,fb:false,inherited:true,commitDate:'',notes:'',
    lines:[{id:'L1',desc:'Control panel wiring loom',qty:2,unit:'ea',unitPrice:1400,shipped:[]}]},
-  {id:'PO-004',customer:'Tri-State Industrial',cpo:'TSI-88231',rcvd:'2025-04-05',due:'2025-06-10',so:'',wo:'',cin7:false,fb:false,notes:'',
+  {id:'PO-004',customer:'Tri-State Industrial',cpo:'TSI-88231',rcvd:'2025-04-05',due:'2025-06-10',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',
    lines:[
     {id:'L1',desc:'Industrial harness type 1',qty:20,unit:'ea',unitPrice:620,shipped:[]},
     {id:'L2',desc:'Industrial harness type 2',qty:15,unit:'ea',unitPrice:580,shipped:[]},
     {id:'L3',desc:'Junction box assembly',qty:10,unit:'ea',unitPrice:340,shipped:[]},
   ]},
-  {id:'0009133',customer:'Inventech Marine Solutions',cpo:'0009133',rcvd:'2025-09-22',due:'2026-01-05',so:'',wo:'',cin7:false,fb:false,notes:'PO from KMacCubbin — Life Proof Boats',lines:INV_LINES()},
-  {id:'0009134',customer:'Inventech Marine Solutions',cpo:'0009134',rcvd:'2025-09-22',due:'2026-02-23',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
-  {id:'0009135',customer:'Inventech Marine Solutions',cpo:'0009135',rcvd:'2025-09-22',due:'2026-04-06',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
-  {id:'0009136',customer:'Inventech Marine Solutions',cpo:'0009136',rcvd:'2025-09-22',due:'2026-06-08',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
-  {id:'0009137',customer:'Inventech Marine Solutions',cpo:'0009137',rcvd:'2025-09-22',due:'2026-08-03',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
-  {id:'0009138',customer:'Inventech Marine Solutions',cpo:'0009138',rcvd:'2025-09-22',due:'2026-09-14',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
+  {id:'0009133',customer:'Inventech Marine Solutions',cpo:'0009133',rcvd:'2025-09-22',due:'2026-01-05',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'PO from KMacCubbin — Life Proof Boats',lines:INV_LINES()},
+  {id:'0009134',customer:'Inventech Marine Solutions',cpo:'0009134',rcvd:'2025-09-22',due:'2026-02-23',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
+  {id:'0009135',customer:'Inventech Marine Solutions',cpo:'0009135',rcvd:'2025-09-22',due:'2026-04-06',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
+  {id:'0009136',customer:'Inventech Marine Solutions',cpo:'0009136',rcvd:'2025-09-22',due:'2026-06-08',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
+  {id:'0009137',customer:'Inventech Marine Solutions',cpo:'0009137',rcvd:'2025-09-22',due:'2026-08-03',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
+  {id:'0009138',customer:'Inventech Marine Solutions',cpo:'0009138',rcvd:'2025-09-22',due:'2026-09-14',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
+  // ── Cascade Engine Center LLC ────────────────────────────────
+  {id:'918781',customer:'Cascade Engine Center LLC',cpo:'918781',rcvd:'2025-11-20',due:'2026-02-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
+    {id:'L2',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:11,unit:'ea',unitPrice:131.29,shipped:[]},
+    {id:'L3',desc:'OT-Harness (Z15-1202)',qty:10,unit:'ea',unitPrice:76.22,shipped:[]},
+    {id:'L4',desc:'OT- Harness (Z15-2012)',qty:14,unit:'ea',unitPrice:86.60,shipped:[]},
+    {id:'L5',desc:'OT- Harness (Z15-2013)',qty:10,unit:'ea',unitPrice:39.00,shipped:[]},
+  ]},
+  {id:'918782',customer:'Cascade Engine Center LLC',cpo:'918782',rcvd:'2025-11-20',due:'2026-03-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
+    {id:'L2',desc:'OT-Harness (Z15-1202)',qty:10,unit:'ea',unitPrice:76.22,shipped:[]},
+    {id:'L3',desc:'OT- Harness (Z15-2012)',qty:13,unit:'ea',unitPrice:86.60,shipped:[]},
+    {id:'L4',desc:'OT- Harness (Z15-2013)',qty:10,unit:'ea',unitPrice:39.00,shipped:[]},
+  ]},
+  {id:'918783',customer:'Cascade Engine Center LLC',cpo:'918783',rcvd:'2025-11-20',due:'2026-04-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
+    {id:'L2',desc:'OT-Harness (Z15-1202)',qty:11,unit:'ea',unitPrice:76.22,shipped:[]},
+    {id:'L3',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:1,unit:'ea',unitPrice:131.29,shipped:[]},
+  ]},
+  {id:'919228',customer:'Cascade Engine Center LLC',cpo:'919228',rcvd:'2025-12-23',due:'2026-03-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:5,unit:'ea',unitPrice:82.22,shipped:[]},
+    {id:'L2',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:12,unit:'ea',unitPrice:131.29,shipped:[]},
+    {id:'L3',desc:'OT-Harness (Z15-1202)',qty:15,unit:'ea',unitPrice:76.22,shipped:[]},
+    {id:'L4',desc:'OT- Harness (Z15-2012)',qty:6,unit:'ea',unitPrice:86.60,shipped:[]},
+    {id:'L5',desc:'OT- Harness (Z15-2013)',qty:7,unit:'ea',unitPrice:39.00,shipped:[]},
+  ]},
+  {id:'919324',customer:'Cascade Engine Center LLC',cpo:'919324',rcvd:'2026-01-05',due:'2026-02-21',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — JD Control Box needs PRT, send DZ110509 to EVS',lines:[
+    {id:'L1',desc:'OT- 25\' Harness (Z15-1189-25)',qty:2,unit:'ea',unitPrice:110.98,shipped:[]},
+    {id:'L2',desc:'OT-Harness (Z15-1198-25)',qty:2,unit:'ea',unitPrice:158.98,shipped:[]},
+    {id:'L3',desc:'OT-Harness; Regulator (Z15-1103)',qty:2,unit:'ea',unitPrice:129.28,shipped:[]},
+    {id:'L4',desc:'OT- JD Control Box (C30-A010/Z14-1057) **NEEDS PRT',qty:2,unit:'ea',unitPrice:2505.93,shipped:[]},
+    {id:'L5',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:2,unit:'ea',unitPrice:298.13,shipped:[]},
+    {id:'L6',desc:'OT-Harness (Z15-1187-80)',qty:2,unit:'ea',unitPrice:316.63,shipped:[]},
+  ]},
+  {id:'919336',customer:'Cascade Engine Center LLC',cpo:'919336',rcvd:'2026-01-05',due:'2026-03-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — JD Control Box needs PRT, send DZ110509 to EVS',lines:[
+    {id:'L1',desc:'OT-100\' Extension Harness (Z15-1061-100)',qty:1,unit:'ea',unitPrice:729.58,shipped:[]},
+    {id:'L2',desc:'OT-Start/Stop Panel (Z14-1032)',qty:3,unit:'ea',unitPrice:110.31,shipped:[]},
+    {id:'L3',desc:'OT- 60\' Harness (Z15-1188-60)',qty:1,unit:'ea',unitPrice:483.57,shipped:[]},
+    {id:'L4',desc:'OT- 25\' Harness (Z15-1189-25)',qty:1,unit:'ea',unitPrice:110.98,shipped:[]},
+    {id:'L5',desc:'OT-Harness (Z15-1198-25)',qty:1,unit:'ea',unitPrice:158.98,shipped:[]},
+    {id:'L6',desc:'OT-35\' Start/Stop Ext Harness (Z15-1007-35)',qty:1,unit:'ea',unitPrice:117.20,shipped:[]},
+    {id:'L7',desc:'OT-60\' Start/Stop Ext Harness (Z15-1007-60)',qty:2,unit:'ea',unitPrice:169.93,shipped:[]},
+    {id:'L8',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:1,unit:'ea',unitPrice:298.13,shipped:[]},
+    {id:'L9',desc:'OT-Harness (Z15-1187-80)',qty:1,unit:'ea',unitPrice:316.63,shipped:[]},
+    {id:'L10',desc:'OT-Harness; Regulator (Z15-1103)',qty:2,unit:'ea',unitPrice:129.28,shipped:[]},
+    {id:'L11',desc:'OT- JD Control Box (C30-A010/Z14-1057) **NEEDS PRT',qty:1,unit:'ea',unitPrice:2505.93,shipped:[]},
+  ]},
+  {id:'919631',customer:'Cascade Engine Center LLC',cpo:'919631',rcvd:'2026-01-26',due:'2026-02-06',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT-Harness (Z15-1201)',qty:1,unit:'ea',unitPrice:270.05,shipped:[]},
+  ]},
+  {id:'919843',customer:'Cascade Engine Center LLC',cpo:'919843',rcvd:'2026-02-11',due:'2026-02-18',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT-Harness (Z15-1201)',qty:1,unit:'ea',unitPrice:270.05,shipped:[]},
+  ]},
+  {id:'919882',customer:'Cascade Engine Center LLC',cpo:'919882',rcvd:'2026-02-13',due:'2026-04-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT-060-001045-41 (Z15-2010)',qty:6,unit:'ea',unitPrice:9.77,shipped:[]},
+    {id:'L2',desc:'OT-060-001046-41 (Z15-2011)',qty:6,unit:'ea',unitPrice:9.77,shipped:[]},
+  ]},
+  {id:'919922',customer:'Cascade Engine Center LLC',cpo:'919922',rcvd:'2026-02-17',due:'2026-04-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
+    {id:'L2',desc:'OT- Harness (Z15-2012)',qty:10,unit:'ea',unitPrice:86.60,shipped:[]},
+    {id:'L3',desc:'OT- Harness (Z15-2013)',qty:10,unit:'ea',unitPrice:39.00,shipped:[]},
+  ]},
+  {id:'920038',customer:'Cascade Engine Center LLC',cpo:'920038',rcvd:'2026-02-25',due:'2026-04-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:1,unit:'ea',unitPrice:82.22,shipped:[]},
+    {id:'L2',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:25,unit:'ea',unitPrice:131.29,shipped:[]},
+    {id:'L3',desc:'OT-Harness (Z15-1202)',qty:20,unit:'ea',unitPrice:76.22,shipped:[]},
+    {id:'L4',desc:'OT- Harness (Z15-2012)',qty:1,unit:'ea',unitPrice:86.60,shipped:[]},
+    {id:'L5',desc:'OT- Harness (Z15-2013)',qty:1,unit:'ea',unitPrice:39.00,shipped:[]},
+    {id:'L6',desc:'OT- Harness: Low Coolant Level (Z15-1116-6)',qty:2,unit:'ea',unitPrice:116.14,shipped:[]},
+  ]},
+  {id:'920081',customer:'Cascade Engine Center LLC',cpo:'920081',rcvd:'2026-02-26',due:'2026-03-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
+    {id:'L1',desc:'OT-Start/Stop Panel (Z14-1032)',qty:3,unit:'ea',unitPrice:110.31,shipped:[]},
+    {id:'L2',desc:'OT- 25\' Harness (Z15-1189-25)',qty:1,unit:'ea',unitPrice:110.98,shipped:[]},
+    {id:'L3',desc:'OT-Harness (Z15-1198-25)',qty:1,unit:'ea',unitPrice:158.98,shipped:[]},
+    {id:'L4',desc:'OT-35\' Start/Stop Ext Harness (Z15-1007-35)',qty:1,unit:'ea',unitPrice:117.20,shipped:[]},
+    {id:'L5',desc:'OT-60\' Start/Stop Ext Harness (Z15-1007-60)',qty:2,unit:'ea',unitPrice:169.93,shipped:[]},
+    {id:'L6',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:1,unit:'ea',unitPrice:284.97,shipped:[]},
+  ]},
+  {id:'920137',customer:'Cascade Engine Center LLC',cpo:'920137',rcvd:'2026-03-03',due:'2026-07-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — JD Control Box needs PRT, send DZ110509 to EVS',lines:[
+    {id:'L1',desc:'OT-Start/Stop Panel (Z14-1032)',qty:6,unit:'ea',unitPrice:110.31,shipped:[]},
+    {id:'L2',desc:'OT- 80\' Harness (Z15-1188-80)',qty:2,unit:'ea',unitPrice:558.34,shipped:[]},
+    {id:'L3',desc:'OT- 25\' Harness (Z15-1189-25)',qty:2,unit:'ea',unitPrice:110.98,shipped:[]},
+    {id:'L4',desc:'OT-Harness (Z15-1198-25)',qty:2,unit:'ea',unitPrice:158.98,shipped:[]},
+    {id:'L5',desc:'OT-Harness; Regulator (Z15-1103)',qty:2,unit:'ea',unitPrice:129.28,shipped:[]},
+    {id:'L6',desc:'OT-35\' Start/Stop Ext Harness (Z15-1007-35)',qty:4,unit:'ea',unitPrice:117.20,shipped:[]},
+    {id:'L7',desc:'OT-60\' Start/Stop Ext Harness (Z15-1007-60)',qty:2,unit:'ea',unitPrice:169.93,shipped:[]},
+    {id:'L8',desc:'OT-Harness (Z15-1007-80)',qty:2,unit:'ea',unitPrice:196.46,shipped:[]},
+    {id:'L9',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:2,unit:'ea',unitPrice:284.97,shipped:[]},
+    {id:'L10',desc:'OT-Harness (Z15-1187-80)',qty:2,unit:'ea',unitPrice:316.63,shipped:[]},
+    {id:'L11',desc:'OT- JD Control Box (C30-A010/Z14-1057) **NEEDS PRT',qty:2,unit:'ea',unitPrice:2602.63,shipped:[]},
+  ]},
+  {id:'920362',customer:'Cascade Engine Center LLC',cpo:'920362',rcvd:'2026-03-18',due:'2026-04-25',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — Warning: Duplicate flagged on PO',lines:[
+    {id:'L1',desc:'OT-Harness; Sensor (Z15-1147)',qty:1,unit:'ea',unitPrice:65.58,shipped:[]},
+    {id:'L2',desc:'OT- 6180 LC Harness (Z15-1219)',qty:4,unit:'ea',unitPrice:115.46,shipped:[]},
+  ]},
+  // ── Super Pacific, Inc. — New Orders ────────────────────────
+  {id:'P00700',customer:'Super Pacific, Inc.',cpo:'P00700',rcvd:'2026-03-03',due:'2026-03-18',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
+    {id:'L1',desc:'Dimmer Switch Assembly, no shrink tubing on wires [SP-ACCS-LIGHT-DIM]',qty:50,unit:'ea',unitPrice:59.50,shipped:[]},
+  ]},
+  {id:'P00876',customer:'Super Pacific, Inc.',cpo:'P00876',rcvd:'2026-04-13',due:'2026-05-19',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
+    {id:'L1',desc:'12" F-Series Red/White Light Bar w/Anderson Installed [KING-RTL-FSER-12]',qty:100,unit:'ea',unitPrice:8.52,shipped:[]},
+    {id:'L2',desc:'40" F-Series Red/White Light Bar w/Anderson Installed [KING-RTL-FSER-40]',qty:100,unit:'ea',unitPrice:8.52,shipped:[]},
+  ]},
+  {id:'P00877',customer:'Super Pacific, Inc.',cpo:'P00877',rcvd:'2026-04-13',due:'2026-05-05',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
+    {id:'L1',desc:'Power Ready Harnesses (A&B pair)',qty:50,unit:'ea',unitPrice:198.51,shipped:[]},
+    {id:'L2',desc:'Power Ready LB Extensions (pair)',qty:50,unit:'ea',unitPrice:45.02,shipped:[]},
+    {id:'L3',desc:'Power Ready Fridge (harness only, no plate/socket)',qty:50,unit:'ea',unitPrice:19.27,shipped:[]},
+  ]},
+  {id:'P00946',customer:'Super Pacific, Inc.',cpo:'P00946',rcvd:'2026-04-21',due:'2026-05-13',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
+    {id:'L1',desc:'Power-Ready Fuse Block Panel 4 Circuit [SP-ACCS-12V-FUSEBLOCK]',qty:50,unit:'ea',unitPrice:126.06,shipped:[]},
+  ]},
+  {id:'P00947',customer:'Super Pacific, Inc.',cpo:'P00947',rcvd:'2026-04-21',due:'2026-05-01',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
+    {id:'L1',desc:'Tent Wire Harness, 176"',qty:50,unit:'ea',unitPrice:22.95,shipped:[]},
+  ]},
 ];
 
 let pos=[];
@@ -266,6 +380,7 @@ let currentTab='pipeline';
 let nextPoNum=5;
 let filterStatus='';
 let filterCustomer='';
+let filterInherited='';
 let searchQ='';
 let _addPoId='';
 let _addLineId='';
@@ -334,14 +449,14 @@ function renderContent(){
   else if(currentTab==='settings') renderSettings();
 }
 
-// ── Pipeline ───────────────────────────────────────────────────
 function renderPipeline(){
   const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
   const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
   const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
   const open=pos.reduce((s,p)=>s+poOpen(p),0);
   const od=pos.filter(p=>isOverdue(p)).length;
-  const notEntered=pos.filter(p=>!p.cin7||!p.fb).length;
+  const inherited=pos.filter(p=>p.inherited).length;
+  const inheritedOpen=pos.filter(p=>p.inherited&&poStatus(p)!=='invoiced'&&poStatus(p)!=='complete').length;
 
   const custs=[...new Set(pos.map(p=>p.customer))].sort();
   const custOpts=custs.map(c=>`<option value="${c}"${filterCustomer===c?' selected':''}>${c}</option>`).join('');
@@ -349,14 +464,15 @@ function renderPipeline(){
   const filtered=pos.filter(po=>{
     return(!searchQ||(po.customer+po.cpo+po.id+po.so+po.wo+po.lines.map(l=>l.desc).join(' ')).toLowerCase().includes(searchQ))
       &&(!filterStatus||poStatus(po)===filterStatus)
-      &&(!filterCustomer||po.customer===filterCustomer);
+      &&(!filterCustomer||po.customer===filterCustomer)
+      &&(filterInherited===''||(filterInherited==='inherited'?po.inherited:!po.inherited));
   });
   const overduePos=filtered.filter(p=>isOverdue(p));
   const restPos=filtered.filter(p=>!isOverdue(p));
 
   let cardsHtml='';
   if(overduePos.length){
-    cardsHtml+=`<div class="section-divider">&#9888; Overdue <span class="divider-badge">${overduePos.length}</span></div>`;
+    cardsHtml+=`<div class="section-divider">&#9888; Overdue — inherited backlog <span class="divider-badge">${overduePos.length}</span></div>`;
     cardsHtml+=overduePos.map(poCard).join('');
   }
   if(restPos.length){
@@ -371,7 +487,7 @@ function renderPipeline(){
       <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
       <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
       <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
-      <div class="metric"><div class="metric-label">Overdue / not entered</div><div class="metric-value${od>0?' red':''}">${od} / ${notEntered}</div></div>
+      <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400;">of ${inherited}</span></div></div>
     </div>
     <div class="toolbar">
       <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" placeholder="Search customer, PO#, part..." value="${searchQ}" oninput="searchQ=this.value;renderPipeline()"/></div>
@@ -382,6 +498,11 @@ function renderPipeline(){
         <option value="complete"${filterStatus==='complete'?' selected':''}>Complete</option>
         <option value="invoiced"${filterStatus==='invoiced'?' selected':''}>Invoiced</option>
         <option value="overdue"${filterStatus==='overdue'?' selected':''}>Overdue</option>
+      </select>
+      <select onchange="filterInherited=this.value;renderPipeline()">
+        <option value=""${filterInherited===''?' selected':''}>All orders</option>
+        <option value="inherited"${filterInherited==='inherited'?' selected':''}>Inherited backlog</option>
+        <option value="new"${filterInherited==='new'?' selected':''}>New orders</option>
       </select>
       <select onchange="filterCustomer=this.value;renderPipeline()">
         <option value="">All customers</option>${custOpts}
@@ -395,23 +516,23 @@ function renderPipeline(){
 function poCard(po){
   const st=poStatus(po),p=poPct(po),isOpen=expanded[po.id],od=isOverdue(po);
   const warn=!po.cin7||!po.fb;
+  const inheritedBadge=po.inherited?`<span class="badge" style="background:rgba(79,124,255,.15);color:#7da4ff;margin-left:6px;">inherited</span>`:'<span class="badge" style="background:rgba(34,201,122,.12);color:#22c97a;margin-left:6px;">new</span>';
+  const commitInfo=po.commitDate?`&nbsp;·&nbsp; committed: ${po.commitDate}`:'&nbsp;·&nbsp; <span style="color:var(--red);font-size:10px;">no commit date</span>';
   const detailHtml=isOpen?`
     <div class="po-detail">
       <div class="detail-grid">
         <div class="field-group"><span class="field-label">Cin7 SO#</span><input class="field-input" type="text" value="${po.so}" placeholder="Enter SO#" onchange="saveField('${po.id}','so',this.value)"/></div>
         <div class="field-group"><span class="field-label">Fishbowl WO#</span><input class="field-input" type="text" value="${po.wo}" placeholder="Enter WO#" onchange="saveField('${po.id}','wo',this.value)"/></div>
+        <div class="field-group"><span class="field-label">Original due date</span><input class="field-input" type="date" value="${po.due}" onchange="saveField('${po.id}','due',this.value)"/></div>
+        <div class="field-group"><span class="field-label">Committed ship date</span><input class="field-input" type="date" value="${po.commitDate||''}" onchange="saveField('${po.id}','commitDate',this.value)" style="${!po.commitDate?'border-color:var(--red);':''}"/></div>
         <div class="field-group"><span class="field-label">Date received</span><input class="field-input" type="date" value="${po.rcvd}" onchange="saveField('${po.id}','rcvd',this.value)"/></div>
-        <div class="field-group"><span class="field-label">Due date</span><input class="field-input" type="date" value="${po.due}" onchange="saveField('${po.id}','due',this.value)"/></div>
         <div class="field-group"><span class="field-label">Notes</span><input class="field-input" type="text" value="${po.notes||''}" placeholder="Internal notes" onchange="saveField('${po.id}','notes',this.value)"/></div>
-        <div class="field-group">
-          <span class="field-label">System flags</span>
-          <div class="chk-row" style="margin-top:6px;">
-            <label class="chk-label"><input type="checkbox" ${po.cin7?'checked':''} onchange="saveField('${po.id}','cin7',this.checked)"/> Cin7</label>
-            <label class="chk-label"><input type="checkbox" ${po.fb?'checked':''} onchange="saveField('${po.id}','fb',this.checked)"/> Fishbowl</label>
-          </div>
-        </div>
       </div>
-      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+      <div style="margin-top:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <label class="chk-label"><input type="checkbox" ${po.cin7?'checked':''} onchange="saveField('${po.id}','cin7',this.checked)"/> In Cin7</label>
+        <label class="chk-label"><input type="checkbox" ${po.fb?'checked':''} onchange="saveField('${po.id}','fb',this.checked)"/> In Fishbowl</label>
+        <label class="chk-label"><input type="checkbox" ${po.inherited?'checked':''} onchange="saveField('${po.id}','inherited',this.checked)"/> Inherited backlog</label>
+        <div style="flex:1;"></div>
         <button class="btn btn-xs" onclick="showAddLine('${po.id}')">+ Add line</button>
         <button class="btn btn-xs btn-danger" onclick="removePO('${po.id}')">Delete PO</button>
         <span class="saved-msg" id="flash-${po.id}">✓ saved</span>
@@ -423,11 +544,11 @@ function poCard(po){
     <div class="po-header" onclick="togglePO('${po.id}')">
       <span class="chevron${isOpen?' open':''}">&#9658;</span>
       <div>
-        <div class="po-customer">${po.customer}</div>
+        <div class="po-customer">${po.customer}${inheritedBadge}</div>
         <div class="po-meta">PO: ${po.cpo} &nbsp;·&nbsp; SO: ${po.so||'—'} &nbsp;·&nbsp; WO: ${po.wo||'—'}${warn?' &nbsp;·&nbsp; ⚠ needs entry':''}</div>
       </div>
       <div>
-        <div class="po-lines-info">${po.lines.length} line${po.lines.length!==1?'s':''} &nbsp;·&nbsp; due ${po.due||'—'}</div>
+        <div class="po-lines-info">${po.lines.length} line${po.lines.length!==1?'s':''} &nbsp;·&nbsp; orig due: ${po.due||'—'}${commitInfo}</div>
         <div class="prog-wrap">${progBar(p)}<span class="prog-pct">${p}%</span></div>
       </div>
       <div class="col-val"><div class="col-label">value</div><div class="col-num">${fmt(poValue(po))}</div></div>
@@ -586,21 +707,20 @@ function saveField(poId,field,value){
 }
 
 function renderMetricsOnly(){
-  // Lightweight re-render — just update metric cards without rebuilding whole list
   if(currentTab!=='pipeline')return;
   const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
   const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
   const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
   const open=pos.reduce((s,p)=>s+poOpen(p),0);
-  const od=pos.filter(p=>isOverdue(p)).length;
-  const notEntered=pos.filter(p=>!p.cin7||!p.fb).length;
+  const inherited=pos.filter(p=>p.inherited).length;
+  const inheritedOpen=pos.filter(p=>p.inherited&&poStatus(p)!=='invoiced'&&poStatus(p)!=='complete').length;
   const m=document.querySelector('.metrics');
   if(m) m.innerHTML=`
     <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
     <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
     <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
     <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
-    <div class="metric"><div class="metric-label">Overdue / not entered</div><div class="metric-value${od>0?' red':''}">${od} / ${notEntered}</div></div>`;
+    <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400;">of ${inherited}</span></div></div>`;
 }
 
 function removePO(id){
@@ -634,9 +754,13 @@ function showAddPO(){
         <div><div class="field-label" style="margin-bottom:4px;">Customer *</div><input id="m-cust" type="text" placeholder="Customer name"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Customer PO# *</div><input id="m-cpo" type="text" placeholder="PO number"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Date received</div><input id="m-rcvd" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Due date</div><input id="m-due" type="date"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Original due date</div><input id="m-due" type="date"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Committed ship date</div><input id="m-commit" type="date"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Cin7 SO# (optional)</div><input id="m-so" type="text" placeholder="SO#"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Fishbowl WO# (optional)</div><input id="m-wo" type="text" placeholder="WO#"/></div>
+        <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px;">
+          <label class="chk-label"><input type="checkbox" id="m-inherited"/> Inherited backlog</label>
+        </div>
         <div class="full"><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="m-notes" type="text" placeholder="Internal notes"/></div>
       </div>
       <div class="modal-actions">
@@ -697,7 +821,10 @@ function submitAddPO(){
   const wo=document.getElementById('m-wo').value.trim();
   const id='PO-'+String(nextPoNum++).padStart(3,'0');
   pos.push({id,customer:cust,cpo,rcvd:document.getElementById('m-rcvd').value,
-    due:document.getElementById('m-due').value,so,wo,cin7:!!so,fb:!!wo,
+    due:document.getElementById('m-due').value,
+    commitDate:document.getElementById('m-commit').value,
+    so,wo,cin7:!!so,fb:!!wo,
+    inherited:document.getElementById('m-inherited').checked,
     notes:document.getElementById('m-notes').value.trim(),lines:[]});
   expanded[id]=true;
   saveData();closeModal();renderContent();
