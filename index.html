@@ -976,6 +976,8 @@ function parseCSVLine(line){
   result.push(cur);
   return result;
 }
+
+function clearAll(){
   if(!confirm('Delete ALL pipeline data? This cannot be undone.'))return;
   if(!confirm('Are you sure? All POs and shipment history will be lost.'))return;
   pos=[];saveData();expanded={};renderContent();
