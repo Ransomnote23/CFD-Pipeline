@@ -636,43 +636,79 @@ function linesHtml(po){
 
 // ── Projections ────────────────────────────────────────────────
 function renderProjections(){
-  const monthMap={};
+  // Helper: month key from a date string
+  const monthKey=dateStr=>{
+    if(!dateStr)return null;
+    const d=new Date(dateStr);
+    if(isNaN(d))return null;
+    return{key:d.toLocaleString('default',{month:'short',year:'numeric'}),d};
+  };
+
+  // Build month buckets
+  // PO value and open: grouped by due date (what's owed by month)
+  // Shipped and invoiced: grouped by actual ship date (what actually moved)
+  const dueBuckets={};   // key -> {rev, open, d}
+  const shipBuckets={};  // key -> {shipped, invoiced, d}
+
   pos.forEach(po=>{
-    if(!po.due)return;
-    const d=new Date(po.due);
-    const key=d.toLocaleString('default',{month:'short',year:'numeric'});
-    if(!monthMap[key])monthMap[key]={rev:0,shipped:0,invoiced:0,open:0,count:0,due:d};
-    monthMap[key].rev+=poValue(po);
-    monthMap[key].shipped+=poShipped(po);
-    monthMap[key].invoiced+=poInvoiced(po);
-    monthMap[key].open+=poOpen(po);
-    monthMap[key].count++;
+    // Due-date bucket: total PO value and open balance
+    const due=monthKey(po.due);
+    if(due){
+      if(!dueBuckets[due.key]) dueBuckets[due.key]={rev:0,open:0,d:due.d};
+      dueBuckets[due.key].rev+=poValue(po);
+      dueBuckets[due.key].open+=poOpen(po);
+    }
+
+    // Ship-date buckets: iterate every shipment on every line
+    po.lines.forEach(l=>{
+      l.shipped.forEach(sh=>{
+        const sm=monthKey(sh.date);
+        if(!sm)return;
+        if(!shipBuckets[sm.key]) shipBuckets[sm.key]={shipped:0,invoiced:0,d:sm.d};
+        const val=sh.qty*l.unitPrice;
+        shipBuckets[sm.key].shipped+=val;
+        if(sh.inv) shipBuckets[sm.key].invoiced+=val;
+      });
+    });
   });
-  const months=Object.entries(monthMap).sort((a,b)=>a[1].due-b[1].due);
+
+  // Merge all month keys for the table
+  const allKeys=new Set([...Object.keys(dueBuckets),...Object.keys(shipBuckets)]);
+  const months=[...allKeys].map(key=>{
+    const due=dueBuckets[key]||{rev:0,open:0,d:new Date(key)};
+    const ship=shipBuckets[key]||{shipped:0,invoiced:0};
+    // Sort date: prefer the real date object
+    const d=due.d||ship.d||new Date(key);
+    return{key,d,rev:due.rev,open:due.open,shipped:ship.shipped,invoiced:ship.invoiced};
+  }).sort((a,b)=>a.d-b.d);
+
   const totalRev=pos.reduce((s,p)=>s+poValue(p),0);
+  const totalOpen=pos.reduce((s,p)=>s+poOpen(p),0);
   const totalShipped=pos.reduce((s,p)=>s+poShipped(p),0);
   const totalInvoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
-  const totalOpen=pos.reduce((s,p)=>s+poOpen(p),0);
-  const target=settings.monthlyTarget||0;
 
-  const monthRows=months.map(([m,d],i)=>`
+  const monthRows=months.map((m,i)=>`
     <div class="proj-table-row proj-5col" style="${i%2?'':'background:rgba(255,255,255,.02)'}">
-      <span>${m}</span>
-      <span class="proj-val">${fmt(d.rev)}</span>
-      <span class="proj-val amber">${fmt(d.shipped)}</span>
-      <span class="proj-val green">${fmt(d.invoiced)}</span>
-      <span class="proj-val">${fmt(d.open)}</span>
+      <span>${m.key}</span>
+      <span class="proj-val">${m.rev>0?fmt(m.rev):'—'}</span>
+      <span class="proj-val amber">${m.shipped>0?fmt(m.shipped):'—'}</span>
+      <span class="proj-val green">${m.invoiced>0?fmt(m.invoiced):'—'}</span>
+      <span class="proj-val">${m.open>0?fmt(m.open):'—'}</span>
     </div>`).join('');
 
   const custMap={};
   pos.forEach(po=>{
-    if(!custMap[po.customer])custMap[po.customer]={rev:0,count:0};
+    if(!custMap[po.customer])custMap[po.customer]={rev:0,invoiced:0,open:0};
     custMap[po.customer].rev+=poValue(po);
-    custMap[po.customer].count+=po.lines.reduce((s,l)=>s+l.qty,0);
+    custMap[po.customer].invoiced+=poInvoiced(po);
+    custMap[po.customer].open+=poOpen(po);
   });
   const custRows=Object.entries(custMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d],i)=>`
-    <div class="proj-table-row" style="grid-template-columns:2fr 1fr 1fr;${i%2?'':'background:rgba(255,255,255,.02)'}">
-      <span>${c}</span><span class="proj-val">${fmt(d.rev)}</span><span class="proj-val">${d.count} units</span>
+    <div class="proj-table-row" style="grid-template-columns:2fr 1fr 1fr 1fr;${i%2?'':'background:rgba(255,255,255,.02)'}">
+      <span>${c}</span>
+      <span class="proj-val">${fmt(d.rev)}</span>
+      <span class="proj-val green">${fmt(d.invoiced)}</span>
+      <span class="proj-val amber">${fmt(d.open)}</span>
     </div>`).join('');
 
   document.getElementById('content').innerHTML=`
@@ -683,15 +719,24 @@ function renderProjections(){
     </div>
 
     <div class="proj-table" style="margin-bottom:16px;">
-      <div class="proj-table-header proj-5col"><span>Month</span><span class="proj-val">PO value</span><span class="proj-val">Shipped</span><span class="proj-val">Invoiced</span><span class="proj-val">Open</span></div>
+      <div style="padding:8px 14px 4px;font-size:10px;color:var(--text3);font-family:var(--mono);">
+        PO value &amp; open = grouped by due date &nbsp;·&nbsp; Shipped &amp; invoiced = grouped by actual ship date
+      </div>
+      <div class="proj-table-header proj-5col"><span>Month</span><span class="proj-val">PO value due</span><span class="proj-val">Shipped</span><span class="proj-val">Invoiced</span><span class="proj-val">Open balance</span></div>
       ${monthRows}
       <div class="proj-table-row proj-5col total">
-        <span>TOTAL</span><span class="proj-val">${fmt(totalRev)}</span><span class="proj-val amber">${fmt(totalShipped)}</span><span class="proj-val green">${fmt(totalInvoiced)}</span><span class="proj-val">${fmt(totalOpen)}</span>
+        <span>TOTAL</span>
+        <span class="proj-val">${fmt(totalRev)}</span>
+        <span class="proj-val amber">${fmt(totalShipped)}</span>
+        <span class="proj-val green">${fmt(totalInvoiced)}</span>
+        <span class="proj-val">${fmt(totalOpen)}</span>
       </div>
     </div>
 
     <div class="proj-table">
-      <div class="proj-table-header" style="grid-template-columns:2fr 1fr 1fr;"><span>Customer</span><span class="proj-val">Total value</span><span class="proj-val">Units ordered</span></div>
+      <div class="proj-table-header" style="grid-template-columns:2fr 1fr 1fr 1fr;">
+        <span>Customer</span><span class="proj-val">Total value</span><span class="proj-val">Invoiced</span><span class="proj-val">Open</span>
+      </div>
       ${custRows}
     </div>`;
 }
