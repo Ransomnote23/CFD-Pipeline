@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SCP Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0f1117;
+  --surface:#181c27;
+  --surface2:#1e2333;
+  --border:#2a2f42;
+  --border2:#343a52;
+  --text:#e8eaf0;
+  --text2:#8b90a7;
+  --text3:#555b73;
+  --accent:#4f7cff;
+  --accent-dim:#1e2d5a;
+  --green:#22c97a;
+  --green-dim:#0d2e1e;
+  --amber:#f5a623;
+  --amber-dim:#2e2006;
+  --red:#ff4d6a;
+  --red-dim:#2e0d14;
+  --mono:'DM Mono',monospace;
+  --sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-rows:56px 1fr;height:100vh;overflow:hidden;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0;}
+.topbar-logo{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);letter-spacing:.08em;}
+.topbar-logo span{color:var(--accent);}
+.topbar-spacer{flex:1;}
+.topbar-meta{font-size:12px;color:var(--text3);font-family:var(--mono);}
+.main{display:grid;grid-template-columns:220px 1fr;overflow:hidden;}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:16px 0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;}
+.sidebar-section{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;padding:12px 16px 6px;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;border-radius:0;transition:background .12s;font-size:13px;color:var(--text2);border-left:2px solid transparent;}
+.sidebar-item:hover{background:var(--surface2);color:var(--text);}
+.sidebar-item.active{background:var(--accent-dim);color:var(--accent);border-left-color:var(--accent);}
+.sidebar-item .dot{width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;}
+.sidebar-item.active .dot,.sidebar-item:hover .dot{background:currentColor;}
+.content{overflow-y:auto;padding:24px;}
+
+/* ── Metrics ── */
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+.metric-label{font-size:11px;color:var(--text3);font-family:var(--mono);letter-spacing:.04em;margin-bottom:6px;}
+.metric-value{font-size:22px;font-weight:600;font-family:var(--mono);}
+.metric-value.green{color:var(--green);}
+.metric-value.amber{color:var(--amber);}
+.metric-value.red{color:var(--red);}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+.search-wrap{position:relative;flex:1;min-width:200px;}
+.search-wrap input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px 7px 32px;font-family:var(--sans);font-size:13px;outline:none;transition:border .15s;}
+.search-wrap input:focus{border-color:var(--accent);}
+.search-wrap input::placeholder{color:var(--text3);}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px;}
+select{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-family:var(--sans);font-size:13px;outline:none;cursor:pointer;}
+select:focus{border-color:var(--accent);}
+.btn{background:var(--surface);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:7px 14px;font-family:var(--sans);font-size:13px;cursor:pointer;transition:all .12s;white-space:nowrap;}
+.btn:hover{border-color:var(--border2);color:var(--text);}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-primary:hover{background:#3d6aee;border-color:#3d6aee;color:#fff;}
+.btn-danger{color:var(--red);border-color:transparent;background:transparent;padding:4px 8px;font-size:12px;}
+.btn-danger:hover{background:var(--red-dim);border-color:var(--red);}
+.btn-xs{font-size:11px;padding:3px 8px;}
+.btn-ghost{background:transparent;border:none;color:var(--accent);font-size:12px;padding:0;cursor:pointer;font-family:var(--sans);}
+.btn-ghost:hover{text-decoration:underline;}
+
+/* ── Section divider ── */
+.section-divider{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:8px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.divider-badge{background:var(--red-dim);color:var(--red);border-radius:4px;padding:1px 6px;font-size:10px;}
+
+/* ── PO Cards ── */
+.po-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;transition:border-color .15s;}
+.po-card:hover{border-color:var(--border2);}
+.po-card.overdue{border-color:var(--red);border-left:3px solid var(--red);}
+.po-header{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.5fr) 100px 100px 100px 100px 110px 100px;gap:8px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
+.po-header:hover{background:rgba(255,255,255,.02);}
+.chevron{color:var(--text3);font-size:10px;transition:transform .15s;flex-shrink:0;}
+.chevron.open{transform:rotate(90deg);}
+.po-customer{font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.po-meta{font-size:11px;color:var(--text3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
+.po-lines-info{font-size:11px;color:var(--text3);}
+.prog-wrap{display:flex;align-items:center;gap:6px;margin-top:3px;}
+.prog-bar{height:4px;background:var(--border);border-radius:2px;flex:1;overflow:hidden;}
+.prog-fill{height:100%;border-radius:2px;transition:width .3s;}
+.prog-pct{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap;}
+.col-val{text-align:right;}
+.col-label{font-size:10px;color:var(--text3);font-family:var(--mono);}
+.col-num{font-size:13px;font-weight:500;font-family:var(--mono);}
+.col-num.amber{color:var(--amber);}
+.col-num.green{color:var(--green);}
+
+/* ── Badge ── */
+.badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:500;font-family:var(--mono);white-space:nowrap;}
+.badge.open{background:var(--accent-dim);color:var(--accent);}
+.badge.partial{background:var(--amber-dim);color:var(--amber);}
+.badge.complete{background:var(--green-dim);color:var(--green);}
+.badge.invoiced{background:var(--surface2);color:var(--text3);}
+.badge.overdue{background:var(--red-dim);color:var(--red);}
+
+/* ── Detail panel ── */
+.po-detail{border-top:1px solid var(--border);background:var(--surface2);padding:12px 14px 12px 42px;}
+.detail-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:end;}
+.field-group{display:flex;flex-direction:column;gap:4px;}
+.field-label{font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;}
+.field-input{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-family:var(--mono);font-size:12px;outline:none;transition:border .15s;width:100%;}
+.field-input:focus{border-color:var(--accent);}
+.field-input::placeholder{color:var(--text3);}
+.chk-row{display:flex;gap:14px;padding-top:4px;}
+.chk-label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;}
+.chk-label input{accent-color:var(--accent);width:13px;height:13px;}
+.saved-msg{font-size:11px;color:var(--green);font-family:var(--mono);margin-left:8px;opacity:0;transition:opacity .3s;}
+
+/* ── Lines ── */
+.lines-section{border-top:1px solid var(--border);padding:0 14px 12px 42px;}
+.lines-header{display:grid;grid-template-columns:1fr 70px 80px 80px 80px 90px 90px 110px 90px;gap:8px;padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px;}
+.lines-header span{font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;}
+.lines-header span:not(:first-child){text-align:right;}
+.line-row{display:grid;grid-template-columns:1fr 70px 80px 80px 80px 90px 90px 110px 90px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;}
+.line-row:last-child{border-bottom:none;}
+.line-desc{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.line-num{font-size:12px;font-family:var(--mono);text-align:right;color:var(--text2);}
+.line-actions{display:flex;gap:4px;justify-content:flex-end;}
+
+/* ── Shipments ── */
+.shipments{grid-column:1/-1;background:var(--bg);border-radius:5px;padding:8px 10px;margin-top:4px;}
+.ship-header{display:grid;grid-template-columns:110px 70px 90px 1fr 90px;gap:8px;padding-bottom:4px;border-bottom:1px solid var(--border);margin-bottom:4px;}
+.ship-header span{font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;}
+.ship-row{display:grid;grid-template-columns:110px 70px 90px 1fr 90px;gap:8px;align-items:center;padding:3px 0;font-size:12px;font-family:var(--mono);}
+.ship-inv{background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:1px 4px;width:100%;outline:none;}
+.ship-inv:focus{border-bottom-color:var(--accent);}
+.ship-inv::placeholder{color:var(--text3);}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:24px;width:100%;max-width:560px;}
+.modal-title{font-size:15px;font-weight:600;margin-bottom:16px;}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.modal-grid .full{grid-column:1/-1;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+.modal input,.modal select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-family:var(--sans);font-size:13px;outline:none;width:100%;transition:border .15s;}
+.modal input:focus,.modal select:focus{border-color:var(--accent);}
+.modal input::placeholder{color:var(--text3);}
+.modal-note{font-size:12px;color:var(--text3);margin-bottom:12px;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:48px 24px;color:var(--text3);}
+.empty-title{font-size:15px;color:var(--text2);margin-bottom:8px;}
+
+/* ── Projections tab ── */
+.proj-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+.proj-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.proj-table-header{display:grid;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;}
+.proj-table-row{display:grid;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--mono);align-items:center;}
+.proj-table-row:last-child{border-bottom:none;}
+.proj-table-row.total{background:var(--surface2);font-weight:500;}
+.proj-5col{grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;}
+.proj-val{text-align:right;}
+.proj-val.green{color:var(--green);}
+.proj-val.amber{color:var(--amber);}
+
+/* ── Settings tab ── */
+.settings-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;}
+.settings-card h3{font-size:13px;font-weight:600;margin-bottom:14px;color:var(--text);}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+.settings-row:last-child{border-bottom:none;}
+.settings-label{font-size:13px;color:var(--text2);}
+.settings-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:var(--mono);font-size:12px;outline:none;width:200px;}
+.settings-input:focus{border-color:var(--accent);}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-logo"><span>◆</span> SCP Pipeline</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-meta" id="topbar-date"></div>
+  </div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-section">Views</div>
+      <div class="sidebar-item active" onclick="setTab('pipeline',this)"><div class="dot"></div>Pipeline</div>
+      <div class="sidebar-item" onclick="setTab('projections',this)"><div class="dot"></div>Projections</div>
+      <div class="sidebar-section">Tools</div>
+      <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export CSV</div>
+      <div class="sidebar-item" onclick="exportJSON()"><div class="dot"></div>Backup data</div>
+      <div class="sidebar-item" onclick="document.getElementById('import-file').click()"><div class="dot"></div>Restore backup</div>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)"/>
+      <div class="sidebar-section">Config</div>
+      <div class="sidebar-item" onclick="setTab('settings',this)"><div class="dot"></div>Settings</div>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+<div id="modal-area"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+const STORAGE_KEY='scp_pipeline_v1';
+const SETTINGS_KEY='scp_settings_v1';
+
+const DEFAULT_SETTINGS={
+  companyName:'Small Car Performance',
+  divisionName:'Electrical Manufacturing Division',
+  preparedBy:'',
+  monthlyTarget:0,
+  laborCapacity:320,
+};
+
+const INV_LINES=()=>[
+  {id:'L1',desc:'Harness, Stbd Arch, OTH (I1-B008)',qty:6,unit:'ea',unitPrice:103.87,shipped:[]},
+  {id:'L2',desc:'Harness, Port Arch, OTH (I1-B009)',qty:6,unit:'ea',unitPrice:102.69,shipped:[]},
+  {id:'L3',desc:'Harness, Main Console OTH (I1-B010)',qty:6,unit:'ea',unitPrice:832.62,shipped:[]},
+  {id:'L4',desc:'Harness, AC Panel OTH (I1-B011)',qty:6,unit:'ea',unitPrice:931.99,shipped:[]},
+  {id:'L5',desc:'Harness, Alarm Panel OTH (I1-B012)',qty:6,unit:'ea',unitPrice:386.17,shipped:[]},
+];
+
+const SAMPLE_POS=[
+  {id:'PO-001',customer:'Acme Electrical',cpo:'AE-2024-881',rcvd:'2025-03-01',due:'2025-04-15',so:'SO-1041',wo:'WO-3301',cin7:true,fb:true,notes:'',
+   lines:[
+    {id:'L1',desc:'14 AWG wire harness assembly',qty:10,unit:'ea',unitPrice:320,shipped:[{date:'2025-03-20',qty:6,inv:'INV-9201'},{date:'2025-04-10',qty:2,inv:''}]},
+    {id:'L2',desc:'16 AWG pigtail assembly',qty:5,unit:'ea',unitPrice:180,shipped:[{date:'2025-03-20',qty:5,inv:'INV-9201'}]},
+  ]},
+  {id:'PO-002',customer:'Northwest Auto Group',cpo:'NW-044',rcvd:'2025-03-10',due:'2025-05-01',so:'SO-1045',wo:'WO-3308',cin7:true,fb:true,notes:'',
+   lines:[
+    {id:'L1',desc:'Auto wire harness — model A',qty:8,unit:'ea',unitPrice:410,shipped:[{date:'2025-04-05',qty:3,inv:''}]},
+    {id:'L2',desc:'Auto wire harness — model B',qty:4,unit:'ea',unitPrice:390,shipped:[]},
+  ]},
+  {id:'PO-003',customer:'Cascade Controls',cpo:'CC-2025-07',rcvd:'2025-03-18',due:'2025-04-28',so:'SO-1049',wo:'',cin7:true,fb:false,notes:'',
+   lines:[{id:'L1',desc:'Control panel wiring loom',qty:2,unit:'ea',unitPrice:1400,shipped:[]}]},
+  {id:'PO-004',customer:'Tri-State Industrial',cpo:'TSI-88231',rcvd:'2025-04-05',due:'2025-06-10',so:'',wo:'',cin7:false,fb:false,notes:'',
+   lines:[
+    {id:'L1',desc:'Industrial harness type 1',qty:20,unit:'ea',unitPrice:620,shipped:[]},
+    {id:'L2',desc:'Industrial harness type 2',qty:15,unit:'ea',unitPrice:580,shipped:[]},
+    {id:'L3',desc:'Junction box assembly',qty:10,unit:'ea',unitPrice:340,shipped:[]},
+  ]},
+  {id:'0009133',customer:'Inventech Marine Solutions',cpo:'0009133',rcvd:'2025-09-22',due:'2026-01-05',so:'',wo:'',cin7:false,fb:false,notes:'PO from KMacCubbin — Life Proof Boats',lines:INV_LINES()},
+  {id:'0009134',customer:'Inventech Marine Solutions',cpo:'0009134',rcvd:'2025-09-22',due:'2026-02-23',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
+  {id:'0009135',customer:'Inventech Marine Solutions',cpo:'0009135',rcvd:'2025-09-22',due:'2026-04-06',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
+  {id:'0009136',customer:'Inventech Marine Solutions',cpo:'0009136',rcvd:'2025-09-22',due:'2026-06-08',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
+  {id:'0009137',customer:'Inventech Marine Solutions',cpo:'0009137',rcvd:'2025-09-22',due:'2026-08-03',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
+  {id:'0009138',customer:'Inventech Marine Solutions',cpo:'0009138',rcvd:'2025-09-22',due:'2026-09-14',so:'',wo:'',cin7:false,fb:false,notes:'',lines:INV_LINES()},
+];
+
+let pos=[];
+let settings={...DEFAULT_SETTINGS};
+let expanded={};
+let currentTab='pipeline';
+let nextPoNum=5;
+let filterStatus='';
+let filterCustomer='';
+let searchQ='';
+let _addPoId='';
+let _addLineId='';
+
+function loadData(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    pos=raw?JSON.parse(raw):JSON.parse(JSON.stringify(SAMPLE_POS));
+    const sr=localStorage.getItem(SETTINGS_KEY);
+    if(sr) settings={...DEFAULT_SETTINGS,...JSON.parse(sr)};
+    nextPoNum=pos.filter(p=>p.id.startsWith('PO-')).reduce((m,p)=>{
+      const n=parseInt(p.id.replace('PO-',''))||0; return Math.max(m,n+1);
+    },5);
+  }catch(e){pos=JSON.parse(JSON.stringify(SAMPLE_POS));}
+}
+function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(pos));}
+function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));}
+
+// ── Calculations ───────────────────────────────────────────────
+const fmt=n=>'$'+Math.round(n).toLocaleString();
+const fmtD=n=>n!=null&&n!==''?'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+const poValue=po=>po.lines.reduce((s,l)=>s+l.qty*l.unitPrice,0);
+const lineValue=l=>l.qty*l.unitPrice;
+const lineShippedQty=l=>l.shipped.reduce((s,sh)=>s+sh.qty,0);
+const lineOpenQty=l=>l.qty-lineShippedQty(l);
+const lineShippedVal=l=>l.shipped.reduce((s,sh)=>s+sh.qty*l.unitPrice,0);
+const lineInvoicedVal=l=>l.shipped.filter(s=>s.inv).reduce((s,sh)=>s+sh.qty*l.unitPrice,0);
+const poShipped=po=>po.lines.reduce((s,l)=>s+lineShippedVal(l),0);
+const poInvoiced=po=>po.lines.reduce((s,l)=>s+lineInvoicedVal(l),0);
+const poOpen=po=>poValue(po)-poShipped(po);
+const poPct=po=>{const v=poValue(po);return v>0?Math.round(poShipped(po)/v*100):0;};
+function isOverdue(po){
+  if(!po.due)return false;
+  const t=new Date();t.setHours(0,0,0,0);
+  return new Date(po.due)<t&&poPct(po)<100;
+}
+function poStatus(po){
+  const p=poPct(po);
+  if(p===100&&po.lines.every(l=>l.shipped.every(s=>s.inv)&&lineOpenQty(l)===0))return'invoiced';
+  if(p===100)return'complete';
+  if(isOverdue(po))return'overdue';
+  if(p>0)return'partial';
+  return'open';
+}
+function lineStatus(l){
+  const openQ=lineOpenQty(l);
+  if(openQ===0)return l.shipped.every(s=>s.inv)?'invoiced':'complete';
+  return lineShippedQty(l)>0?'partial':'open';
+}
+function progBar(p){
+  const c=p===100?'var(--green)':p>0?'var(--amber)':'var(--border2)';
+  return`<div class="prog-bar"><div class="prog-fill" style="width:${p}%;background:${c};"></div></div>`;
+}
+
+// ── Tab routing ────────────────────────────────────────────────
+function setTab(tab,el){
+  currentTab=tab;
+  document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
+  if(el)el.classList.add('active');
+  renderContent();
+}
+
+function renderContent(){
+  if(currentTab==='pipeline') renderPipeline();
+  else if(currentTab==='projections') renderProjections();
+  else if(currentTab==='settings') renderSettings();
+}
+
+// ── Pipeline ───────────────────────────────────────────────────
+function renderPipeline(){
+  const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
+  const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
+  const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
+  const open=pos.reduce((s,p)=>s+poOpen(p),0);
+  const od=pos.filter(p=>isOverdue(p)).length;
+  const notEntered=pos.filter(p=>!p.cin7||!p.fb).length;
+
+  const custs=[...new Set(pos.map(p=>p.customer))].sort();
+  const custOpts=custs.map(c=>`<option value="${c}"${filterCustomer===c?' selected':''}>${c}</option>`).join('');
+
+  const filtered=pos.filter(po=>{
+    return(!searchQ||(po.customer+po.cpo+po.id+po.so+po.wo+po.lines.map(l=>l.desc).join(' ')).toLowerCase().includes(searchQ))
+      &&(!filterStatus||poStatus(po)===filterStatus)
+      &&(!filterCustomer||po.customer===filterCustomer);
+  });
+  const overduePos=filtered.filter(p=>isOverdue(p));
+  const restPos=filtered.filter(p=>!isOverdue(p));
+
+  let cardsHtml='';
+  if(overduePos.length){
+    cardsHtml+=`<div class="section-divider">&#9888; Overdue <span class="divider-badge">${overduePos.length}</span></div>`;
+    cardsHtml+=overduePos.map(poCard).join('');
+  }
+  if(restPos.length){
+    if(overduePos.length) cardsHtml+=`<div class="section-divider" style="margin-top:16px;">Active orders</div>`;
+    cardsHtml+=restPos.map(poCard).join('');
+  }
+  if(!filtered.length) cardsHtml=`<div class="empty"><div class="empty-title">No orders match your filters</div><div>Try adjusting your search or filter</div></div>`;
+
+  document.getElementById('content').innerHTML=`
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
+      <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
+      <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
+      <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
+      <div class="metric"><div class="metric-label">Overdue / not entered</div><div class="metric-value${od>0?' red':''}">${od} / ${notEntered}</div></div>
+    </div>
+    <div class="toolbar">
+      <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" placeholder="Search customer, PO#, part..." value="${searchQ}" oninput="searchQ=this.value;renderPipeline()"/></div>
+      <select onchange="filterStatus=this.value;renderPipeline()">
+        <option value="">All statuses</option>
+        <option value="open"${filterStatus==='open'?' selected':''}>Open</option>
+        <option value="partial"${filterStatus==='partial'?' selected':''}>Partial</option>
+        <option value="complete"${filterStatus==='complete'?' selected':''}>Complete</option>
+        <option value="invoiced"${filterStatus==='invoiced'?' selected':''}>Invoiced</option>
+        <option value="overdue"${filterStatus==='overdue'?' selected':''}>Overdue</option>
+      </select>
+      <select onchange="filterCustomer=this.value;renderPipeline()">
+        <option value="">All customers</option>${custOpts}
+      </select>
+      <button class="btn btn-primary" onclick="showAddPO()">+ New PO</button>
+      <button class="btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+    <div id="po-list">${cardsHtml}</div>`;
+}
+
+function poCard(po){
+  const st=poStatus(po),p=poPct(po),isOpen=expanded[po.id],od=isOverdue(po);
+  const warn=!po.cin7||!po.fb;
+  const detailHtml=isOpen?`
+    <div class="po-detail">
+      <div class="detail-grid">
+        <div class="field-group"><span class="field-label">Cin7 SO#</span><input class="field-input" type="text" value="${po.so}" placeholder="Enter SO#" onchange="saveField('${po.id}','so',this.value)"/></div>
+        <div class="field-group"><span class="field-label">Fishbowl WO#</span><input class="field-input" type="text" value="${po.wo}" placeholder="Enter WO#" onchange="saveField('${po.id}','wo',this.value)"/></div>
+        <div class="field-group"><span class="field-label">Date received</span><input class="field-input" type="date" value="${po.rcvd}" onchange="saveField('${po.id}','rcvd',this.value)"/></div>
+        <div class="field-group"><span class="field-label">Due date</span><input class="field-input" type="date" value="${po.due}" onchange="saveField('${po.id}','due',this.value)"/></div>
+        <div class="field-group"><span class="field-label">Notes</span><input class="field-input" type="text" value="${po.notes||''}" placeholder="Internal notes" onchange="saveField('${po.id}','notes',this.value)"/></div>
+        <div class="field-group">
+          <span class="field-label">System flags</span>
+          <div class="chk-row" style="margin-top:6px;">
+            <label class="chk-label"><input type="checkbox" ${po.cin7?'checked':''} onchange="saveField('${po.id}','cin7',this.checked)"/> Cin7</label>
+            <label class="chk-label"><input type="checkbox" ${po.fb?'checked':''} onchange="saveField('${po.id}','fb',this.checked)"/> Fishbowl</label>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-xs" onclick="showAddLine('${po.id}')">+ Add line</button>
+        <button class="btn btn-xs btn-danger" onclick="removePO('${po.id}')">Delete PO</button>
+        <span class="saved-msg" id="flash-${po.id}">✓ saved</span>
+      </div>
+    </div>
+    ${linesHtml(po)}`:'';
+
+  return`<div class="po-card${od?' overdue':''}">
+    <div class="po-header" onclick="togglePO('${po.id}')">
+      <span class="chevron${isOpen?' open':''}">&#9658;</span>
+      <div>
+        <div class="po-customer">${po.customer}</div>
+        <div class="po-meta">PO: ${po.cpo} &nbsp;·&nbsp; SO: ${po.so||'—'} &nbsp;·&nbsp; WO: ${po.wo||'—'}${warn?' &nbsp;·&nbsp; ⚠ needs entry':''}</div>
+      </div>
+      <div>
+        <div class="po-lines-info">${po.lines.length} line${po.lines.length!==1?'s':''} &nbsp;·&nbsp; due ${po.due||'—'}</div>
+        <div class="prog-wrap">${progBar(p)}<span class="prog-pct">${p}%</span></div>
+      </div>
+      <div class="col-val"><div class="col-label">value</div><div class="col-num">${fmt(poValue(po))}</div></div>
+      <div class="col-val"><div class="col-label">shipped</div><div class="col-num amber">${fmt(poShipped(po))}</div></div>
+      <div class="col-val"><div class="col-label">invoiced</div><div class="col-num green">${fmt(poInvoiced(po))}</div></div>
+      <div class="col-val"><div class="col-label">open</div><div class="col-num">${fmt(poOpen(po))}</div></div>
+      <span class="badge ${st}">${st}</span>
+      <div></div>
+    </div>
+    ${detailHtml}
+  </div>`;
+}
+
+function linesHtml(po){
+  const rows=po.lines.map(l=>{
+    const shQ=lineShippedQty(l),openQ=lineOpenQty(l),shV=lineShippedVal(l),lv=lineValue(l);
+    const lp=lv>0?Math.round(shQ/l.qty*100):0;
+    const lst=lineStatus(l);
+    const shipsHtml=l.shipped.length>0?`
+      <div class="shipments" onclick="event.stopPropagation()">
+        <div class="ship-header"><span>Date</span><span>Qty</span><span>Value</span><span>Invoice#</span><span></span></div>
+        ${l.shipped.map((sh,si)=>`<div class="ship-row">
+          <span>${sh.date}</span>
+          <span>${sh.qty} ${l.unit}</span>
+          <span>${fmt(sh.qty*l.unitPrice)}</span>
+          <input class="ship-inv" type="text" value="${sh.inv}" placeholder="invoice#" onchange="setShipInv('${po.id}','${l.id}',${si},this.value)"/>
+          <button class="btn-ghost" onclick="removeShipment('${po.id}','${l.id}',${si})">remove</button>
+        </div>`).join('')}
+      </div>`:'';
+    return`<div class="line-row" style="flex-wrap:wrap;">
+      <div class="line-desc" title="${l.desc}">${l.desc}</div>
+      <div class="line-num">${l.qty}</div>
+      <div class="line-num">${fmt(l.unitPrice)}</div>
+      <div class="line-num">${fmt(lv)}</div>
+      <div class="line-num" style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">${progBar(lp)}<span style="font-size:10px;">${shQ}/${l.qty}</span></div>
+      <div class="line-num amber">${fmt(shV)}</div>
+      <div class="line-num">${fmt(openQ*l.unitPrice)}</div>
+      <span class="badge ${lst}" style="justify-self:end;">${lst}</span>
+      <div class="line-actions">
+        <button class="btn btn-xs" onclick="showAddShipment('${po.id}','${l.id}')">+ Ship</button>
+        <button class="btn btn-xs btn-danger" onclick="removeLine('${po.id}','${l.id}')">✕</button>
+      </div>
+      ${l.shipped.length>0?`<div style="grid-column:1/-1;">${shipsHtml}</div>`:''}
+    </div>`;
+  }).join('');
+
+  return`<div class="lines-section" onclick="event.stopPropagation()">
+    <div class="lines-header">
+      <span>Description</span><span style="text-align:right">Qty</span><span style="text-align:right">Unit $</span>
+      <span style="text-align:right">Value</span><span style="text-align:right">Fulfilled</span>
+      <span style="text-align:right">Shipped $</span><span style="text-align:right">Open $</span>
+      <span style="text-align:right">Status</span><span></span>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+// ── Projections ────────────────────────────────────────────────
+function renderProjections(){
+  const monthMap={};
+  pos.forEach(po=>{
+    if(!po.due)return;
+    const d=new Date(po.due);
+    const key=d.toLocaleString('default',{month:'short',year:'numeric'});
+    if(!monthMap[key])monthMap[key]={rev:0,shipped:0,invoiced:0,open:0,count:0,due:d};
+    monthMap[key].rev+=poValue(po);
+    monthMap[key].shipped+=poShipped(po);
+    monthMap[key].invoiced+=poInvoiced(po);
+    monthMap[key].open+=poOpen(po);
+    monthMap[key].count++;
+  });
+  const months=Object.entries(monthMap).sort((a,b)=>a[1].due-b[1].due);
+  const totalRev=pos.reduce((s,p)=>s+poValue(p),0);
+  const totalShipped=pos.reduce((s,p)=>s+poShipped(p),0);
+  const totalInvoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
+  const totalOpen=pos.reduce((s,p)=>s+poOpen(p),0);
+  const target=settings.monthlyTarget||0;
+
+  const monthRows=months.map(([m,d],i)=>`
+    <div class="proj-table-row proj-5col" style="${i%2?'':'background:rgba(255,255,255,.02)'}">
+      <span>${m}</span>
+      <span class="proj-val">${fmt(d.rev)}</span>
+      <span class="proj-val amber">${fmt(d.shipped)}</span>
+      <span class="proj-val green">${fmt(d.invoiced)}</span>
+      <span class="proj-val">${fmt(d.open)}</span>
+    </div>`).join('');
+
+  const custMap={};
+  pos.forEach(po=>{
+    if(!custMap[po.customer])custMap[po.customer]={rev:0,count:0};
+    custMap[po.customer].rev+=poValue(po);
+    custMap[po.customer].count+=po.lines.reduce((s,l)=>s+l.qty,0);
+  });
+  const custRows=Object.entries(custMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d],i)=>`
+    <div class="proj-table-row" style="grid-template-columns:2fr 1fr 1fr;${i%2?'':'background:rgba(255,255,255,.02)'}">
+      <span>${c}</span><span class="proj-val">${fmt(d.rev)}</span><span class="proj-val">${d.count} units</span>
+    </div>`).join('');
+
+  document.getElementById('content').innerHTML=`
+    <div class="proj-grid">
+      <div class="metric"><div class="metric-label">Total pipeline</div><div class="metric-value">${fmt(totalRev)}</div><div class="metric-sub">${pos.length} POs · ${pos.reduce((s,p)=>s+p.lines.length,0)} lines</div></div>
+      <div class="metric"><div class="metric-label">Invoiced to date</div><div class="metric-value green">${fmt(totalInvoiced)}</div><div class="metric-sub">${totalRev>0?Math.round(totalInvoiced/totalRev*100):0}% of pipeline</div></div>
+      <div class="metric"><div class="metric-label">Still open</div><div class="metric-value amber">${fmt(totalOpen)}</div><div class="metric-sub">Remaining to fulfill</div></div>
+    </div>
+
+    <div class="proj-table" style="margin-bottom:16px;">
+      <div class="proj-table-header proj-5col"><span>Month</span><span class="proj-val">PO value</span><span class="proj-val">Shipped</span><span class="proj-val">Invoiced</span><span class="proj-val">Open</span></div>
+      ${monthRows}
+      <div class="proj-table-row proj-5col total">
+        <span>TOTAL</span><span class="proj-val">${fmt(totalRev)}</span><span class="proj-val amber">${fmt(totalShipped)}</span><span class="proj-val green">${fmt(totalInvoiced)}</span><span class="proj-val">${fmt(totalOpen)}</span>
+      </div>
+    </div>
+
+    <div class="proj-table">
+      <div class="proj-table-header" style="grid-template-columns:2fr 1fr 1fr;"><span>Customer</span><span class="proj-val">Total value</span><span class="proj-val">Units ordered</span></div>
+      ${custRows}
+    </div>`;
+}
+
+// ── Settings ───────────────────────────────────────────────────
+function renderSettings(){
+  document.getElementById('content').innerHTML=`
+    <div class="settings-card">
+      <h3>Company info</h3>
+      <div class="settings-row"><span class="settings-label">Company name</span><input class="settings-input" type="text" value="${settings.companyName}" onchange="saveSetting('companyName',this.value)"/></div>
+      <div class="settings-row"><span class="settings-label">Division name</span><input class="settings-input" type="text" value="${settings.divisionName}" onchange="saveSetting('divisionName',this.value)"/></div>
+      <div class="settings-row"><span class="settings-label">Your name</span><input class="settings-input" type="text" value="${settings.preparedBy}" placeholder="For reports" onchange="saveSetting('preparedBy',this.value)"/></div>
+    </div>
+    <div class="settings-card">
+      <h3>Production targets</h3>
+      <div class="settings-row"><span class="settings-label">Monthly revenue target ($)</span><input class="settings-input" type="number" value="${settings.monthlyTarget}" onchange="saveSetting('monthlyTarget',parseFloat(this.value)||0)"/></div>
+      <div class="settings-row"><span class="settings-label">Monthly labor capacity (hrs)</span><input class="settings-input" type="number" value="${settings.laborCapacity}" onchange="saveSetting('laborCapacity',parseFloat(this.value)||0)"/></div>
+    </div>
+    <div class="settings-card">
+      <h3>Data management</h3>
+      <div class="settings-row"><span class="settings-label">Export all data to CSV</span><button class="btn" onclick="exportCSV()">Export CSV</button></div>
+      <div class="settings-row"><span class="settings-label">Backup data to JSON</span><button class="btn" onclick="exportJSON()">Download backup</button></div>
+      <div class="settings-row"><span class="settings-label">Restore from backup</span><button class="btn" onclick="document.getElementById('import-file').click()">Upload backup file</button></div>
+      <div class="settings-row"><span class="settings-label" style="color:var(--red)">Clear all data</span><button class="btn btn-danger" onclick="clearAll()">Clear all data</button></div>
+    </div>`;
+}
+function saveSetting(k,v){settings[k]=v;saveSettings();}
+
+// ── Actions ────────────────────────────────────────────────────
+function togglePO(id){expanded[id]=!expanded[id];renderContent();}
+
+function saveField(poId,field,value){
+  const po=pos.find(p=>p.id===poId);if(!po)return;
+  po[field]=value;
+  if(field==='so') po.cin7=!!value.trim();
+  if(field==='wo') po.fb=!!value.trim();
+  saveData();
+  const flash=document.getElementById('flash-'+poId);
+  if(flash){flash.style.opacity='1';setTimeout(()=>{if(flash)flash.style.opacity='0';},1500);}
+  renderMetricsOnly();
+}
+
+function renderMetricsOnly(){
+  // Lightweight re-render — just update metric cards without rebuilding whole list
+  if(currentTab!=='pipeline')return;
+  const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
+  const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
+  const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
+  const open=pos.reduce((s,p)=>s+poOpen(p),0);
+  const od=pos.filter(p=>isOverdue(p)).length;
+  const notEntered=pos.filter(p=>!p.cin7||!p.fb).length;
+  const m=document.querySelector('.metrics');
+  if(m) m.innerHTML=`
+    <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
+    <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
+    <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
+    <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
+    <div class="metric"><div class="metric-label">Overdue / not entered</div><div class="metric-value${od>0?' red':''}">${od} / ${notEntered}</div></div>`;
+}
+
+function removePO(id){
+  if(!confirm('Delete this PO? This cannot be undone.'))return;
+  pos=pos.filter(p=>p.id!==id);
+  saveData();renderContent();
+}
+function removeLine(poId,lId){
+  const po=pos.find(p=>p.id===poId);
+  if(po&&confirm('Delete this line?')){po.lines=po.lines.filter(l=>l.id!==lId);saveData();renderContent();}
+}
+function removeShipment(poId,lId,si){
+  const po=pos.find(p=>p.id===poId);
+  const l=po&&po.lines.find(x=>x.id===lId);
+  if(l&&confirm('Remove this shipment?')){l.shipped.splice(si,1);saveData();renderContent();}
+}
+function setShipInv(poId,lId,si,val){
+  const po=pos.find(p=>p.id===poId);
+  const l=po&&po.lines.find(x=>x.id===lId);
+  if(l&&l.shipped[si]!==undefined){l.shipped[si].inv=val.trim();saveData();renderMetricsOnly();}
+}
+
+// ── Modals ─────────────────────────────────────────────────────
+function closeModal(){document.getElementById('modal-area').innerHTML='';}
+
+function showAddPO(){
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-title">New purchase order</div>
+      <div class="modal-grid">
+        <div><div class="field-label" style="margin-bottom:4px;">Customer *</div><input id="m-cust" type="text" placeholder="Customer name"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Customer PO# *</div><input id="m-cpo" type="text" placeholder="PO number"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Date received</div><input id="m-rcvd" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Due date</div><input id="m-due" type="date"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Cin7 SO# (optional)</div><input id="m-so" type="text" placeholder="SO#"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Fishbowl WO# (optional)</div><input id="m-wo" type="text" placeholder="WO#"/></div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="m-notes" type="text" placeholder="Internal notes"/></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddPO()">Add PO</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function showAddLine(poId){
+  _addPoId=poId;
+  const po=pos.find(p=>p.id===poId);
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-title">Add line — ${po.customer} / ${po.cpo}</div>
+      <div class="modal-grid">
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Description / part *</div><input id="m-desc" type="text" placeholder="Part number or assembly description"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Qty ordered</div><input id="m-qty" type="number" min="1" value="1"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Unit</div><input id="m-unit" type="text" value="ea"/></div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Unit price ($)</div><input id="m-price" type="number" min="0" step="0.01" value="0"/></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddLine()">Add line</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function showAddShipment(poId,lId){
+  _addPoId=poId;_addLineId=lId;
+  const po=pos.find(p=>p.id===poId);
+  const l=po&&po.lines.find(x=>x.id===lId);
+  const openQty=lineOpenQty(l);
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-title">Record shipment</div>
+      <div class="modal-note">${l.desc}<br>Open qty: <strong>${openQty} ${l.unit}</strong> &nbsp;·&nbsp; Unit price: <strong>${fmt(l.unitPrice)}</strong></div>
+      <div class="modal-grid">
+        <div><div class="field-label" style="margin-bottom:4px;">Ship date</div><input id="m-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Qty shipped</div><input id="m-sqty" type="number" min="1" max="${openQty}" value="${openQty}"/></div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Invoice# (leave blank if not yet invoiced)</div><input id="m-inv" type="text" placeholder="Invoice number"/></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitShipment()">Record shipment</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function submitAddPO(){
+  const cust=document.getElementById('m-cust').value.trim();
+  const cpo=document.getElementById('m-cpo').value.trim();
+  if(!cust||!cpo){alert('Customer and PO# are required.');return;}
+  const so=document.getElementById('m-so').value.trim();
+  const wo=document.getElementById('m-wo').value.trim();
+  const id='PO-'+String(nextPoNum++).padStart(3,'0');
+  pos.push({id,customer:cust,cpo,rcvd:document.getElementById('m-rcvd').value,
+    due:document.getElementById('m-due').value,so,wo,cin7:!!so,fb:!!wo,
+    notes:document.getElementById('m-notes').value.trim(),lines:[]});
+  expanded[id]=true;
+  saveData();closeModal();renderContent();
+}
+function submitAddLine(){
+  const po=pos.find(p=>p.id===_addPoId);if(!po)return;
+  const desc=document.getElementById('m-desc').value.trim();
+  if(!desc){alert('Description is required.');return;}
+  const ids=po.lines.map(l=>parseInt(l.id.replace('L',''))||0);
+  po.lines.push({id:'L'+(Math.max(0,...ids,0)+1),desc,
+    qty:parseInt(document.getElementById('m-qty').value)||1,
+    unit:document.getElementById('m-unit').value||'ea',
+    unitPrice:parseFloat(document.getElementById('m-price').value)||0,
+    shipped:[]});
+  saveData();closeModal();renderContent();
+}
+function submitShipment(){
+  const po=pos.find(p=>p.id===_addPoId);
+  const l=po&&po.lines.find(x=>x.id===_addLineId);if(!l)return;
+  const qty=parseInt(document.getElementById('m-sqty').value)||0;
+  const open=lineOpenQty(l);
+  if(qty<=0||qty>open){alert(`Qty must be between 1 and ${open}.`);return;}
+  l.shipped.push({date:document.getElementById('m-date').value,qty,
+    inv:document.getElementById('m-inv').value.trim()});
+  saveData();closeModal();renderContent();
+}
+
+// ── Export / Import ────────────────────────────────────────────
+function exportCSV(){
+  const rows=[['PO ID','Customer','Customer PO#','Date Received','Due Date','Cin7 SO#','FB WO#','Notes','Line ID','Description','Ordered Qty','Unit','Unit Price','Line Value','Shipped Qty','Shipped Value','Open Qty','Open Value','Invoice#s','Line Status']];
+  pos.forEach(po=>po.lines.forEach(l=>{
+    const shQ=lineShippedQty(l),openQ=lineOpenQty(l);
+    const invNums=[...new Set(l.shipped.filter(s=>s.inv).map(s=>s.inv))].join('; ');
+    rows.push([po.id,`"${po.customer}"`,po.cpo,po.rcvd,po.due,po.so,po.wo,`"${po.notes||''}"`,l.id,`"${l.desc}"`,l.qty,l.unit,l.unitPrice,lineValue(l),shQ,lineShippedVal(l),openQ,openQ*l.unitPrice,invNums,lineStatus(l)]);
+  }));
+  dl(rows.map(r=>r.join(',')).join('\n'),'pipeline_'+today()+'.csv','text/csv');
+}
+function exportJSON(){
+  dl(JSON.stringify({pos,settings,exported:new Date().toISOString()},null,2),'scp_backup_'+today()+'.json','application/json');
+}
+function importJSON(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      if(d.pos&&Array.isArray(d.pos)){
+        pos=d.pos;
+        if(d.settings) settings={...DEFAULT_SETTINGS,...d.settings};
+        saveData();saveSettings();
+        alert(`Restored ${pos.length} POs successfully.`);
+        renderContent();
+      }else{alert('Invalid backup file.');}
+    }catch{alert('Could not read backup file.');}
+  };
+  r.readAsText(file);
+  e.target.value='';
+}
+function clearAll(){
+  if(!confirm('Delete ALL pipeline data? This cannot be undone.'))return;
+  if(!confirm('Are you sure? All POs and shipment history will be lost.'))return;
+  pos=[];saveData();expanded={};renderContent();
+}
+function dl(content,filename,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=filename;a.click();
+}
+function today(){return new Date().toISOString().slice(0,10);}
+
+// ── Init ───────────────────────────────────────────────────────
+loadData();
+document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+renderContent();
+</script>
+</body>
+</html>
