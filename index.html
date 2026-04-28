@@ -203,6 +203,8 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-item" onclick="exportJSON()"><div class="dot"></div>Backup data</div>
       <div class="sidebar-item" onclick="document.getElementById('import-file').click()"><div class="dot"></div>Restore backup</div>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)"/>
+      <div class="sidebar-item" onclick="document.getElementById('import-csv-file').click()"><div class="dot"></div>Import POs from CSV</div>
+      <input type="file" id="import-csv-file" accept=".csv" style="display:none" onchange="importCSV(event)"/>
       <div class="sidebar-section">Config</div>
       <div class="sidebar-item" onclick="setTab('settings',this)"><div class="dot"></div>Settings</div>
     </div>
@@ -883,7 +885,97 @@ function importJSON(e){
   r.readAsText(file);
   e.target.value='';
 }
-function clearAll(){
+function importCSV(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const lines=ev.target.result.split('\n').filter(l=>l.trim());
+      const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+      const idx=h=>headers.indexOf(h);
+      // Parse rows into PO map
+      const poMap={};
+      for(let i=1;i<lines.length;i++){
+        const cols=parseCSVLine(lines[i]);
+        if(cols.length<14)continue;
+        const poId=cols[idx('po_id')]?.trim();
+        if(!poId)continue;
+        if(!poMap[poId]){
+          poMap[poId]={
+            id:poId,
+            customer:cols[idx('customer')]?.trim()||'',
+            cpo:cols[idx('cpo')]?.trim()||poId,
+            rcvd:cols[idx('rcvd')]?.trim()||'',
+            due:cols[idx('due')]?.trim()||'',
+            commitDate:cols[idx('commitDate')]?.trim()||'',
+            so:cols[idx('so')]?.trim()||'',
+            wo:cols[idx('wo')]?.trim()||'',
+            cin7:cols[idx('cin7')]?.trim()==='Y',
+            fb:cols[idx('fb')]?.trim()==='Y',
+            inherited:cols[idx('inherited')]?.trim()==='Y',
+            notes:cols[idx('notes')]?.trim()||'',
+            lines:[]
+          };
+        }
+        const lineId=cols[idx('line_id')]?.trim();
+        const lineDesc=cols[idx('line_desc')]?.trim();
+        if(lineId&&lineDesc){
+          const invStr=cols[idx('invoices')]?.trim()||'';
+          const shippedQty=parseInt(cols[idx('shipped_qty')])||0;
+          const shipped=shippedQty>0?[{date:'',qty:shippedQty,inv:invStr}]:[];
+          poMap[poId].lines.push({
+            id:lineId,
+            desc:lineDesc,
+            qty:parseInt(cols[idx('qty')])||0,
+            unit:cols[idx('unit')]?.trim()||'ea',
+            unitPrice:parseFloat(cols[idx('unit_price')])||0,
+            shipped
+          });
+        }
+      }
+      const newPos=Object.values(poMap);
+      if(!newPos.length){alert('No valid POs found in CSV.');return;}
+      // Merge: skip any PO ids already in pos
+      const existingIds=new Set(pos.map(p=>p.id));
+      const toAdd=newPos.filter(p=>!existingIds.has(p.id));
+      const dupes=newPos.filter(p=>existingIds.has(p.id));
+      if(!toAdd.length){
+        alert(`All ${newPos.length} PO(s) in this CSV already exist in your pipeline. Nothing was added.`);
+        return;
+      }
+      pos=[...pos,...toAdd];
+      saveData();
+      const msg=dupes.length
+        ?`Added ${toAdd.length} PO(s). Skipped ${dupes.length} duplicate(s): ${dupes.map(p=>p.cpo).join(', ')}.`
+        :`Successfully imported ${toAdd.length} PO(s).`;
+      alert(msg);
+      renderContent();
+    }catch(err){
+      alert('Error parsing CSV: '+err.message);
+      console.error(err);
+    }
+  };
+  r.readAsText(file);
+  e.target.value='';
+}
+
+function parseCSVLine(line){
+  const result=[];
+  let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){
+      if(inQ&&line[i+1]==='"'){cur+='"';i++;}
+      else inQ=!inQ;
+    } else if(c===','&&!inQ){
+      result.push(cur);cur='';
+    } else {
+      cur+=c;
+    }
+  }
+  result.push(cur);
+  return result;
+}
   if(!confirm('Delete ALL pipeline data? This cannot be undone.'))return;
   if(!confirm('Are you sure? All POs and shipment history will be lost.'))return;
   pos=[];saveData();expanded={};renderContent();
