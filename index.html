@@ -420,6 +420,8 @@ function loadData(){
     nextPoNum=pos.filter(p=>p.id.startsWith('PO-')).reduce((m,p)=>{
       const n=parseInt(p.id.replace('PO-',''))||0; return Math.max(m,n+1);
     },5);
+    // Always sync lists from current PO data to catch any gaps
+    syncListsFromPos(pos);
   }catch(e){pos=JSON.parse(JSON.stringify(SAMPLE_POS));}
 }
 function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(pos));}
@@ -1025,12 +1027,7 @@ function submitAddPO(){
     so,wo,cin7:!!so,fb:!!wo,
     inherited:document.getElementById('m-inherited').checked,
     notes:document.getElementById('m-notes').value.trim(),lines:[]});
-  // Add to customer list if new
-  if(!customers.find(c=>c.name===cust)){
-    customers.push({name:cust});
-    customers.sort((a,b)=>a.name.localeCompare(b.name));
-    saveCustomers();
-  }
+  syncListsFromPos([pos[pos.length-1]]);
   expanded[id]=true;
   saveData();closeModal();renderContent();
 }
@@ -1045,12 +1042,9 @@ function submitAddLine(){
   po.lines.push({id:'L'+(Math.max(0,...ids,0)+1),desc,
     qty:parseInt(document.getElementById('m-qty').value)||1,
     unit,unitPrice,shipped:[]});
-  // Save to SKU library if checkbox checked
+  // Save to SKU library via sync (always) — checkbox controls whether to update existing price
   if(document.getElementById('m-savesku')?.checked){
-    const existing=skus.find(s=>s.desc===desc);
-    if(!existing) skus.push({desc,unit,unitPrice});
-    else{existing.unit=unit;existing.unitPrice=unitPrice;}
-    saveSkus();
+    syncListsFromPos([{customer:po.customer,lines:[{desc,unit,unitPrice}]}]);
   }
   saveData();closeModal();renderContent();
 }
@@ -1063,6 +1057,36 @@ function submitShipment(){
   l.shipped.push({date:document.getElementById('m-date').value,qty,
     inv:document.getElementById('m-inv').value.trim()});
   saveData();closeModal();renderContent();
+}
+
+// ── Sync customer & SKU lists from PO data ─────────────────────
+// Called any time POs are added — merges in new customers and SKUs
+// without overwriting existing entries or their edited values
+function syncListsFromPos(newPosList){
+  let custChanged=false, skuChanged=false;
+  newPosList.forEach(po=>{
+    // Customer
+    if(po.customer&&!customers.find(c=>c.name===po.customer)){
+      customers.push({name:po.customer});
+      custChanged=true;
+    }
+    // SKUs from each line
+    po.lines.forEach(l=>{
+      if(!l.desc) return;
+      const existing=skus.find(s=>s.desc===l.desc);
+      if(!existing){
+        skus.push({desc:l.desc,unit:l.unit||'ea',unitPrice:l.unitPrice||0});
+        skuChanged=true;
+      }
+      // If price was 0 and now we have a real price, update it
+      else if(existing.unitPrice===0&&l.unitPrice>0){
+        existing.unitPrice=l.unitPrice;
+        skuChanged=true;
+      }
+    });
+  });
+  if(custChanged){customers.sort((a,b)=>a.name.localeCompare(b.name));saveCustomers();}
+  if(skuChanged) saveSkus();
 }
 
 // ── Export / Import ────────────────────────────────────────────
@@ -1089,6 +1113,7 @@ function importJSON(e){
         if(d.settings) settings={...DEFAULT_SETTINGS,...d.settings};
         if(d.customers) customers=d.customers;
         if(d.skus) skus=d.skus;
+        syncListsFromPos(pos);
         saveData();saveSettings();saveCustomers();saveSkus();
         alert(`Restored ${pos.length} POs successfully.`);
         renderContent();
@@ -1157,6 +1182,7 @@ function importCSV(e){
         return;
       }
       pos=[...pos,...toAdd];
+      syncListsFromPos(toAdd);
       saveData();
       const msg=dupes.length
         ?`Added ${toAdd.length} PO(s). Skipped ${dupes.length} duplicate(s): ${dupes.map(p=>p.cpo).join(', ')}.`
