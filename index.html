@@ -7,48 +7,30 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-:root{
-  --bg:#0f1117;
-  --surface:#181c27;
-  --surface2:#1e2333;
-  --border:#2a2f42;
-  --border2:#343a52;
-  --text:#e8eaf0;
-  --text2:#8b90a7;
-  --text3:#555b73;
-  --accent:#4f7cff;
-  --accent-dim:#1e2d5a;
-  --green:#22c97a;
-  --green-dim:#0d2e1e;
-  --amber:#f5a623;
-  --amber-dim:#2e2006;
-  --red:#ff4d6a;
-  --red-dim:#2e0d14;
-  --mono:'DM Mono',monospace;
-  --sans:'DM Sans',sans-serif;
-}
+:root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2333;--border:#2a2f42;--border2:#343a52;--text:#e8eaf0;--text2:#8b90a7;--text3:#555b73;--accent:#4f7cff;--accent-dim:#1e2d5a;--green:#22c97a;--green-dim:#0d2e1e;--amber:#f5a623;--amber-dim:#2e2006;--red:#ff4d6a;--red-dim:#2e0d14;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;}
-
-/* ── Layout ── */
 .app{display:grid;grid-template-rows:56px 1fr;height:100vh;overflow:hidden;}
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0;}
-.topbar-logo{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);letter-spacing:.08em;}
+.topbar-logo{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.08em;}
 .topbar-logo span{color:var(--accent);}
 .topbar-spacer{flex:1;}
 .topbar-meta{font-size:12px;color:var(--text3);font-family:var(--mono);}
+.db-status{font-size:11px;font-family:var(--mono);padding:3px 10px;border-radius:4px;}
+.db-status.ok{background:var(--green-dim);color:var(--green);}
+.db-status.err{background:var(--red-dim);color:var(--red);}
+.db-status.loading{background:var(--accent-dim);color:var(--accent);}
 .main{display:grid;grid-template-columns:220px 1fr;overflow:hidden;}
 .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:16px 0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;}
 .sidebar-section{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;padding:12px 16px 6px;}
-.sidebar-item{display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;border-radius:0;transition:background .12s;font-size:13px;color:var(--text2);border-left:2px solid transparent;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;transition:background .12s;font-size:13px;color:var(--text2);border-left:2px solid transparent;}
 .sidebar-item:hover{background:var(--surface2);color:var(--text);}
 .sidebar-item.active{background:var(--accent-dim);color:var(--accent);border-left-color:var(--accent);}
 .sidebar-item .dot{width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;}
 .sidebar-item.active .dot,.sidebar-item:hover .dot{background:currentColor;}
 .content{overflow-y:auto;padding:24px;}
-
-/* ── Metrics ── */
 .metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;}
 .metric{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
 .metric-label{font-size:11px;color:var(--text3);font-family:var(--mono);letter-spacing:.04em;margin-bottom:6px;}
@@ -57,37 +39,30 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .metric-value.amber{color:var(--amber);}
 .metric-value.red{color:var(--red);}
 .metric-sub{font-size:11px;color:var(--text3);margin-top:3px;}
-
-/* ── Toolbar ── */
 .toolbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
 .search-wrap{position:relative;flex:1;min-width:200px;}
 .search-wrap input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px 7px 32px;font-family:var(--sans);font-size:13px;outline:none;transition:border .15s;}
 .search-wrap input:focus{border-color:var(--accent);}
 .search-wrap input::placeholder{color:var(--text3);}
-.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px;}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);}
 select{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-family:var(--sans);font-size:13px;outline:none;cursor:pointer;}
 select:focus{border-color:var(--accent);}
 .btn{background:var(--surface);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:7px 14px;font-family:var(--sans);font-size:13px;cursor:pointer;transition:all .12s;white-space:nowrap;}
-.btn:hover{border-color:var(--border2);color:var(--text);}
+.btn:hover:not(:disabled){border-color:var(--border2);color:var(--text);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
-.btn-primary:hover{background:#3d6aee;border-color:#3d6aee;color:#fff;}
+.btn-primary:hover:not(:disabled){background:#3d6aee;color:#fff;}
 .btn-danger{color:var(--red);border-color:transparent;background:transparent;padding:4px 8px;font-size:12px;}
-.btn-danger:hover{background:var(--red-dim);border-color:var(--red);}
+.btn-danger:hover:not(:disabled){background:var(--red-dim);border-color:var(--red);}
 .btn-xs{font-size:11px;padding:3px 8px;}
 .btn-ghost{background:transparent;border:none;color:var(--accent);font-size:12px;padding:0;cursor:pointer;font-family:var(--sans);}
-.btn-ghost:hover{text-decoration:underline;}
-
-/* ── Section divider ── */
 .section-divider{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:8px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
 .divider-badge{background:var(--red-dim);color:var(--red);border-radius:4px;padding:1px 6px;font-size:10px;}
-
-/* ── PO Cards ── */
-.po-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;transition:border-color .15s;}
-.po-card:hover{border-color:var(--border2);}
+.po-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
 .po-card.overdue{border-color:var(--red);border-left:3px solid var(--red);}
-.po-header{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.5fr) 100px 100px 100px 100px 110px 100px;gap:8px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
+.po-header{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.6fr) 100px 100px 100px 100px 110px 100px;gap:8px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
 .po-header:hover{background:rgba(255,255,255,.02);}
-.chevron{color:var(--text3);font-size:10px;transition:transform .15s;flex-shrink:0;}
+.chevron{color:var(--text3);font-size:10px;transition:transform .15s;}
 .chevron.open{transform:rotate(90deg);}
 .po-customer{font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .po-meta{font-size:11px;color:var(--text3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
@@ -101,16 +76,12 @@ select:focus{border-color:var(--accent);}
 .col-num{font-size:13px;font-weight:500;font-family:var(--mono);}
 .col-num.amber{color:var(--amber);}
 .col-num.green{color:var(--green);}
-
-/* ── Badge ── */
 .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:500;font-family:var(--mono);white-space:nowrap;}
 .badge.open{background:var(--accent-dim);color:var(--accent);}
 .badge.partial{background:var(--amber-dim);color:var(--amber);}
 .badge.complete{background:var(--green-dim);color:var(--green);}
 .badge.invoiced{background:var(--surface2);color:var(--text3);}
 .badge.overdue{background:var(--red-dim);color:var(--red);}
-
-/* ── Detail panel ── */
 .po-detail{border-top:1px solid var(--border);background:var(--surface2);padding:12px 14px 12px 42px;}
 .detail-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:end;}
 .field-group{display:flex;flex-direction:column;gap:4px;}
@@ -118,23 +89,18 @@ select:focus{border-color:var(--accent);}
 .field-input{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-family:var(--mono);font-size:12px;outline:none;transition:border .15s;width:100%;}
 .field-input:focus{border-color:var(--accent);}
 .field-input::placeholder{color:var(--text3);}
-.chk-row{display:flex;gap:14px;padding-top:4px;}
 .chk-label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;}
 .chk-label input{accent-color:var(--accent);width:13px;height:13px;}
 .saved-msg{font-size:11px;color:var(--green);font-family:var(--mono);margin-left:8px;opacity:0;transition:opacity .3s;}
-
-/* ── Lines ── */
 .lines-section{border-top:1px solid var(--border);padding:0 14px 12px 42px;}
 .lines-header{display:grid;grid-template-columns:1fr 70px 80px 80px 80px 90px 90px 110px 90px;gap:8px;padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px;}
-.lines-header span{font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;}
+.lines-header span{font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;}
 .lines-header span:not(:first-child){text-align:right;}
-.line-row{display:grid;grid-template-columns:1fr 70px 80px 80px 80px 90px 90px 110px 90px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;}
+.line-row{display:grid;grid-template-columns:1fr 70px 80px 80px 80px 90px 90px 110px 90px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center;}
 .line-row:last-child{border-bottom:none;}
-.line-desc{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.line-desc{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .line-num{font-size:12px;font-family:var(--mono);text-align:right;color:var(--text2);}
 .line-actions{display:flex;gap:4px;justify-content:flex-end;}
-
-/* ── Shipments ── */
 .shipments{grid-column:1/-1;background:var(--bg);border-radius:5px;padding:8px 10px;margin-top:4px;}
 .ship-header{display:grid;grid-template-columns:110px 70px 90px 1fr 90px;gap:8px;padding-bottom:4px;border-bottom:1px solid var(--border);margin-bottom:4px;}
 .ship-header span{font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;}
@@ -142,45 +108,39 @@ select:focus{border-color:var(--accent);}
 .ship-inv{background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:1px 4px;width:100%;outline:none;}
 .ship-inv:focus{border-bottom-color:var(--accent);}
 .ship-inv::placeholder{color:var(--text3);}
-
-/* ── Modal ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:24px;width:100%;max-width:560px;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:24px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;}
 .modal-title{font-size:15px;font-weight:600;margin-bottom:16px;}
 .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
 .modal-grid .full{grid-column:1/-1;}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px;}
 .modal input,.modal select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-family:var(--sans);font-size:13px;outline:none;width:100%;transition:border .15s;}
 .modal input:focus,.modal select:focus{border-color:var(--accent);}
 .modal input::placeholder{color:var(--text3);}
-.modal-note{font-size:12px;color:var(--text3);margin-bottom:12px;}
-
-/* ── Empty state ── */
+.modal-note{font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.5;}
 .empty{text-align:center;padding:48px 24px;color:var(--text3);}
 .empty-title{font-size:15px;color:var(--text2);margin-bottom:8px;}
-
-/* ── Projections tab ── */
 .proj-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
-.proj-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.proj-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;}
 .proj-table-header{display:grid;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;}
 .proj-table-row{display:grid;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--mono);align-items:center;}
 .proj-table-row:last-child{border-bottom:none;}
-.proj-table-row.total{background:var(--surface2);font-weight:500;}
+.proj-table-row.total-row{background:var(--surface2);font-weight:500;}
 .proj-5col{grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;}
 .proj-val{text-align:right;}
 .proj-val.green{color:var(--green);}
 .proj-val.amber{color:var(--amber);}
-
-/* ── Settings tab ── */
 .settings-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;}
 .settings-card h3{font-size:13px;font-weight:600;margin-bottom:14px;color:var(--text);}
-.settings-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);gap:12px;}
 .settings-row:last-child{border-bottom:none;}
-.settings-label{font-size:13px;color:var(--text2);}
-.settings-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:var(--mono);font-size:12px;outline:none;width:200px;}
+.settings-label{font-size:13px;color:var(--text2);flex-shrink:0;}
+.settings-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:var(--mono);font-size:12px;outline:none;width:220px;}
 .settings-input:focus{border-color:var(--accent);}
-
-/* ── Scrollbar ── */
+.migrate-box{background:var(--accent-dim);border:1px solid var(--accent);border-radius:8px;padding:20px;margin-bottom:16px;}
+.migrate-box h3{color:var(--accent);font-size:14px;margin-bottom:8px;}
+.migrate-box p{font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6;}
+@keyframes spin{to{transform:rotate(360deg);}}
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
@@ -191,6 +151,7 @@ select:focus{border-color:var(--accent);}
   <div class="topbar">
     <div class="topbar-logo"><span>◆</span> SCP Pipeline</div>
     <div class="topbar-spacer"></div>
+    <span class="db-status loading" id="db-status">Connecting...</span>
     <div class="topbar-meta" id="topbar-date"></div>
   </div>
   <div class="main">
@@ -200,237 +161,156 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-item" onclick="setTab('projections',this)"><div class="dot"></div>Projections</div>
       <div class="sidebar-section">Tools</div>
       <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export CSV</div>
-      <div class="sidebar-item" onclick="exportJSON()"><div class="dot"></div>Backup data</div>
-      <div class="sidebar-item" onclick="document.getElementById('import-file').click()"><div class="dot"></div>Restore backup</div>
-      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)"/>
       <div class="sidebar-item" onclick="document.getElementById('import-csv-file').click()"><div class="dot"></div>Import POs from CSV</div>
       <input type="file" id="import-csv-file" accept=".csv" style="display:none" onchange="importCSV(event)"/>
       <div class="sidebar-section">Config</div>
-      <div class="sidebar-item" onclick="setTab('settings',this)"><div class="dot"></div>Settings</div>
       <div class="sidebar-item" onclick="setTab('lists',this)"><div class="dot"></div>Customers &amp; SKUs</div>
+      <div class="sidebar-item" onclick="setTab('settings',this)"><div class="dot"></div>Settings</div>
     </div>
-    <div class="content" id="content"></div>
+    <div class="content" id="content">
+      <div class="empty"><div class="empty-title">Connecting to database...</div></div>
+    </div>
   </div>
 </div>
 <div id="modal-area"></div>
-
 <script>
-// ── State ──────────────────────────────────────────────────────
-const STORAGE_KEY='scp_pipeline_v1';
-const SETTINGS_KEY='scp_settings_v1';
-const CUSTOMERS_KEY='scp_customers_v1';
-const SKUS_KEY='scp_skus_v1';
+// ── Supabase setup ─────────────────────────────────────────────
+const SUPA_URL='https://ovndjtazfzagnrtjjirg.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92bmRqdGF6ZnphZ25ydGpqaXJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjYzMDAsImV4cCI6MjA5MzI0MjMwMH0.KXXV9HEIF-uVJ7Y_dw8G8kzCX0XiAsFX4kjGXRjlRo0';
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-const DEFAULT_SETTINGS={
-  companyName:'Small Car Performance',
-  divisionName:'Electrical Manufacturing Division',
-  preparedBy:'',
-  monthlyTarget:0,
-  laborCapacity:320,
-};
+// ── App state ──────────────────────────────────────────────────
+let pos=[],customers=[],skus=[];
+let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
+let expanded={},currentTab='pipeline';
+let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
+let _addPoId='',_addLineId='';
 
-const INV_LINES=()=>[
-  {id:'L1',desc:'Harness, Stbd Arch, OTH (I1-B008)',qty:6,unit:'ea',unitPrice:103.87,shipped:[]},
-  {id:'L2',desc:'Harness, Port Arch, OTH (I1-B009)',qty:6,unit:'ea',unitPrice:102.69,shipped:[]},
-  {id:'L3',desc:'Harness, Main Console OTH (I1-B010)',qty:6,unit:'ea',unitPrice:832.62,shipped:[]},
-  {id:'L4',desc:'Harness, AC Panel OTH (I1-B011)',qty:6,unit:'ea',unitPrice:931.99,shipped:[]},
-  {id:'L5',desc:'Harness, Alarm Panel OTH (I1-B012)',qty:6,unit:'ea',unitPrice:386.17,shipped:[]},
-];
-
-const SAMPLE_POS=[
-  {id:'PO-001',customer:'Acme Electrical',cpo:'AE-2024-881',rcvd:'2025-03-01',due:'2025-04-15',so:'SO-1041',wo:'WO-3301',cin7:true,fb:true,inherited:true,commitDate:'',notes:'',
-   lines:[
-    {id:'L1',desc:'14 AWG wire harness assembly',qty:10,unit:'ea',unitPrice:320,shipped:[{date:'2025-03-20',qty:6,inv:'INV-9201'},{date:'2025-04-10',qty:2,inv:''}]},
-    {id:'L2',desc:'16 AWG pigtail assembly',qty:5,unit:'ea',unitPrice:180,shipped:[{date:'2025-03-20',qty:5,inv:'INV-9201'}]},
-  ]},
-  {id:'PO-002',customer:'Northwest Auto Group',cpo:'NW-044',rcvd:'2025-03-10',due:'2025-05-01',so:'SO-1045',wo:'WO-3308',cin7:true,fb:true,inherited:true,commitDate:'',notes:'',
-   lines:[
-    {id:'L1',desc:'Auto wire harness — model A',qty:8,unit:'ea',unitPrice:410,shipped:[{date:'2025-04-05',qty:3,inv:''}]},
-    {id:'L2',desc:'Auto wire harness — model B',qty:4,unit:'ea',unitPrice:390,shipped:[]},
-  ]},
-  {id:'PO-003',customer:'Cascade Controls',cpo:'CC-2025-07',rcvd:'2025-03-18',due:'2025-04-28',so:'SO-1049',wo:'',cin7:true,fb:false,inherited:true,commitDate:'',notes:'',
-   lines:[{id:'L1',desc:'Control panel wiring loom',qty:2,unit:'ea',unitPrice:1400,shipped:[]}]},
-  {id:'PO-004',customer:'Tri-State Industrial',cpo:'TSI-88231',rcvd:'2025-04-05',due:'2025-06-10',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',
-   lines:[
-    {id:'L1',desc:'Industrial harness type 1',qty:20,unit:'ea',unitPrice:620,shipped:[]},
-    {id:'L2',desc:'Industrial harness type 2',qty:15,unit:'ea',unitPrice:580,shipped:[]},
-    {id:'L3',desc:'Junction box assembly',qty:10,unit:'ea',unitPrice:340,shipped:[]},
-  ]},
-  {id:'0009133',customer:'Inventech Marine Solutions',cpo:'0009133',rcvd:'2025-09-22',due:'2026-01-05',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'PO from KMacCubbin — Life Proof Boats',lines:INV_LINES()},
-  {id:'0009134',customer:'Inventech Marine Solutions',cpo:'0009134',rcvd:'2025-09-22',due:'2026-02-23',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
-  {id:'0009135',customer:'Inventech Marine Solutions',cpo:'0009135',rcvd:'2025-09-22',due:'2026-04-06',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
-  {id:'0009136',customer:'Inventech Marine Solutions',cpo:'0009136',rcvd:'2025-09-22',due:'2026-06-08',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
-  {id:'0009137',customer:'Inventech Marine Solutions',cpo:'0009137',rcvd:'2025-09-22',due:'2026-08-03',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
-  {id:'0009138',customer:'Inventech Marine Solutions',cpo:'0009138',rcvd:'2025-09-22',due:'2026-09-14',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'',lines:INV_LINES()},
-  // ── Cascade Engine Center LLC ────────────────────────────────
-  {id:'918781',customer:'Cascade Engine Center LLC',cpo:'918781',rcvd:'2025-11-20',due:'2026-02-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
-    {id:'L2',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:11,unit:'ea',unitPrice:131.29,shipped:[]},
-    {id:'L3',desc:'OT-Harness (Z15-1202)',qty:10,unit:'ea',unitPrice:76.22,shipped:[]},
-    {id:'L4',desc:'OT- Harness (Z15-2012)',qty:14,unit:'ea',unitPrice:86.60,shipped:[]},
-    {id:'L5',desc:'OT- Harness (Z15-2013)',qty:10,unit:'ea',unitPrice:39.00,shipped:[]},
-  ]},
-  {id:'918782',customer:'Cascade Engine Center LLC',cpo:'918782',rcvd:'2025-11-20',due:'2026-03-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
-    {id:'L2',desc:'OT-Harness (Z15-1202)',qty:10,unit:'ea',unitPrice:76.22,shipped:[]},
-    {id:'L3',desc:'OT- Harness (Z15-2012)',qty:13,unit:'ea',unitPrice:86.60,shipped:[]},
-    {id:'L4',desc:'OT- Harness (Z15-2013)',qty:10,unit:'ea',unitPrice:39.00,shipped:[]},
-  ]},
-  {id:'918783',customer:'Cascade Engine Center LLC',cpo:'918783',rcvd:'2025-11-20',due:'2026-04-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
-    {id:'L2',desc:'OT-Harness (Z15-1202)',qty:11,unit:'ea',unitPrice:76.22,shipped:[]},
-    {id:'L3',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:1,unit:'ea',unitPrice:131.29,shipped:[]},
-  ]},
-  {id:'919228',customer:'Cascade Engine Center LLC',cpo:'919228',rcvd:'2025-12-23',due:'2026-03-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:5,unit:'ea',unitPrice:82.22,shipped:[]},
-    {id:'L2',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:12,unit:'ea',unitPrice:131.29,shipped:[]},
-    {id:'L3',desc:'OT-Harness (Z15-1202)',qty:15,unit:'ea',unitPrice:76.22,shipped:[]},
-    {id:'L4',desc:'OT- Harness (Z15-2012)',qty:6,unit:'ea',unitPrice:86.60,shipped:[]},
-    {id:'L5',desc:'OT- Harness (Z15-2013)',qty:7,unit:'ea',unitPrice:39.00,shipped:[]},
-  ]},
-  {id:'919324',customer:'Cascade Engine Center LLC',cpo:'919324',rcvd:'2026-01-05',due:'2026-02-21',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — JD Control Box needs PRT, send DZ110509 to EVS',lines:[
-    {id:'L1',desc:'OT- 25\' Harness (Z15-1189-25)',qty:2,unit:'ea',unitPrice:110.98,shipped:[]},
-    {id:'L2',desc:'OT-Harness (Z15-1198-25)',qty:2,unit:'ea',unitPrice:158.98,shipped:[]},
-    {id:'L3',desc:'OT-Harness; Regulator (Z15-1103)',qty:2,unit:'ea',unitPrice:129.28,shipped:[]},
-    {id:'L4',desc:'OT- JD Control Box (C30-A010/Z14-1057) **NEEDS PRT',qty:2,unit:'ea',unitPrice:2505.93,shipped:[]},
-    {id:'L5',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:2,unit:'ea',unitPrice:298.13,shipped:[]},
-    {id:'L6',desc:'OT-Harness (Z15-1187-80)',qty:2,unit:'ea',unitPrice:316.63,shipped:[]},
-  ]},
-  {id:'919336',customer:'Cascade Engine Center LLC',cpo:'919336',rcvd:'2026-01-05',due:'2026-03-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — JD Control Box needs PRT, send DZ110509 to EVS',lines:[
-    {id:'L1',desc:'OT-100\' Extension Harness (Z15-1061-100)',qty:1,unit:'ea',unitPrice:729.58,shipped:[]},
-    {id:'L2',desc:'OT-Start/Stop Panel (Z14-1032)',qty:3,unit:'ea',unitPrice:110.31,shipped:[]},
-    {id:'L3',desc:'OT- 60\' Harness (Z15-1188-60)',qty:1,unit:'ea',unitPrice:483.57,shipped:[]},
-    {id:'L4',desc:'OT- 25\' Harness (Z15-1189-25)',qty:1,unit:'ea',unitPrice:110.98,shipped:[]},
-    {id:'L5',desc:'OT-Harness (Z15-1198-25)',qty:1,unit:'ea',unitPrice:158.98,shipped:[]},
-    {id:'L6',desc:'OT-35\' Start/Stop Ext Harness (Z15-1007-35)',qty:1,unit:'ea',unitPrice:117.20,shipped:[]},
-    {id:'L7',desc:'OT-60\' Start/Stop Ext Harness (Z15-1007-60)',qty:2,unit:'ea',unitPrice:169.93,shipped:[]},
-    {id:'L8',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:1,unit:'ea',unitPrice:298.13,shipped:[]},
-    {id:'L9',desc:'OT-Harness (Z15-1187-80)',qty:1,unit:'ea',unitPrice:316.63,shipped:[]},
-    {id:'L10',desc:'OT-Harness; Regulator (Z15-1103)',qty:2,unit:'ea',unitPrice:129.28,shipped:[]},
-    {id:'L11',desc:'OT- JD Control Box (C30-A010/Z14-1057) **NEEDS PRT',qty:1,unit:'ea',unitPrice:2505.93,shipped:[]},
-  ]},
-  {id:'919631',customer:'Cascade Engine Center LLC',cpo:'919631',rcvd:'2026-01-26',due:'2026-02-06',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT-Harness (Z15-1201)',qty:1,unit:'ea',unitPrice:270.05,shipped:[]},
-  ]},
-  {id:'919843',customer:'Cascade Engine Center LLC',cpo:'919843',rcvd:'2026-02-11',due:'2026-02-18',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT-Harness (Z15-1201)',qty:1,unit:'ea',unitPrice:270.05,shipped:[]},
-  ]},
-  {id:'919882',customer:'Cascade Engine Center LLC',cpo:'919882',rcvd:'2026-02-13',due:'2026-04-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT-060-001045-41 (Z15-2010)',qty:6,unit:'ea',unitPrice:9.77,shipped:[]},
-    {id:'L2',desc:'OT-060-001046-41 (Z15-2011)',qty:6,unit:'ea',unitPrice:9.77,shipped:[]},
-  ]},
-  {id:'919922',customer:'Cascade Engine Center LLC',cpo:'919922',rcvd:'2026-02-17',due:'2026-04-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:10,unit:'ea',unitPrice:82.22,shipped:[]},
-    {id:'L2',desc:'OT- Harness (Z15-2012)',qty:10,unit:'ea',unitPrice:86.60,shipped:[]},
-    {id:'L3',desc:'OT- Harness (Z15-2013)',qty:10,unit:'ea',unitPrice:39.00,shipped:[]},
-  ]},
-  {id:'920038',customer:'Cascade Engine Center LLC',cpo:'920038',rcvd:'2026-02-25',due:'2026-04-01',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT- Charge Wire (6136CW)',qty:1,unit:'ea',unitPrice:82.22,shipped:[]},
-    {id:'L2',desc:'OT-Harness, Low Coolant (Z15-1162)',qty:25,unit:'ea',unitPrice:131.29,shipped:[]},
-    {id:'L3',desc:'OT-Harness (Z15-1202)',qty:20,unit:'ea',unitPrice:76.22,shipped:[]},
-    {id:'L4',desc:'OT- Harness (Z15-2012)',qty:1,unit:'ea',unitPrice:86.60,shipped:[]},
-    {id:'L5',desc:'OT- Harness (Z15-2013)',qty:1,unit:'ea',unitPrice:39.00,shipped:[]},
-    {id:'L6',desc:'OT- Harness: Low Coolant Level (Z15-1116-6)',qty:2,unit:'ea',unitPrice:116.14,shipped:[]},
-  ]},
-  {id:'920081',customer:'Cascade Engine Center LLC',cpo:'920081',rcvd:'2026-02-26',due:'2026-03-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi',lines:[
-    {id:'L1',desc:'OT-Start/Stop Panel (Z14-1032)',qty:3,unit:'ea',unitPrice:110.31,shipped:[]},
-    {id:'L2',desc:'OT- 25\' Harness (Z15-1189-25)',qty:1,unit:'ea',unitPrice:110.98,shipped:[]},
-    {id:'L3',desc:'OT-Harness (Z15-1198-25)',qty:1,unit:'ea',unitPrice:158.98,shipped:[]},
-    {id:'L4',desc:'OT-35\' Start/Stop Ext Harness (Z15-1007-35)',qty:1,unit:'ea',unitPrice:117.20,shipped:[]},
-    {id:'L5',desc:'OT-60\' Start/Stop Ext Harness (Z15-1007-60)',qty:2,unit:'ea',unitPrice:169.93,shipped:[]},
-    {id:'L6',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:1,unit:'ea',unitPrice:284.97,shipped:[]},
-  ]},
-  {id:'920137',customer:'Cascade Engine Center LLC',cpo:'920137',rcvd:'2026-03-03',due:'2026-07-15',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — JD Control Box needs PRT, send DZ110509 to EVS',lines:[
-    {id:'L1',desc:'OT-Start/Stop Panel (Z14-1032)',qty:6,unit:'ea',unitPrice:110.31,shipped:[]},
-    {id:'L2',desc:'OT- 80\' Harness (Z15-1188-80)',qty:2,unit:'ea',unitPrice:558.34,shipped:[]},
-    {id:'L3',desc:'OT- 25\' Harness (Z15-1189-25)',qty:2,unit:'ea',unitPrice:110.98,shipped:[]},
-    {id:'L4',desc:'OT-Harness (Z15-1198-25)',qty:2,unit:'ea',unitPrice:158.98,shipped:[]},
-    {id:'L5',desc:'OT-Harness; Regulator (Z15-1103)',qty:2,unit:'ea',unitPrice:129.28,shipped:[]},
-    {id:'L6',desc:'OT-35\' Start/Stop Ext Harness (Z15-1007-35)',qty:4,unit:'ea',unitPrice:117.20,shipped:[]},
-    {id:'L7',desc:'OT-60\' Start/Stop Ext Harness (Z15-1007-60)',qty:2,unit:'ea',unitPrice:169.93,shipped:[]},
-    {id:'L8',desc:'OT-Harness (Z15-1007-80)',qty:2,unit:'ea',unitPrice:196.46,shipped:[]},
-    {id:'L9',desc:'OT-Emergency Throttle Kit (Z14-1059)',qty:2,unit:'ea',unitPrice:284.97,shipped:[]},
-    {id:'L10',desc:'OT-Harness (Z15-1187-80)',qty:2,unit:'ea',unitPrice:316.63,shipped:[]},
-    {id:'L11',desc:'OT- JD Control Box (C30-A010/Z14-1057) **NEEDS PRT',qty:2,unit:'ea',unitPrice:2602.63,shipped:[]},
-  ]},
-  {id:'920362',customer:'Cascade Engine Center LLC',cpo:'920362',rcvd:'2026-03-18',due:'2026-04-25',so:'',wo:'',cin7:false,fb:false,inherited:true,commitDate:'',notes:'Buyer: April Nozumi — Warning: Duplicate flagged on PO',lines:[
-    {id:'L1',desc:'OT-Harness; Sensor (Z15-1147)',qty:1,unit:'ea',unitPrice:65.58,shipped:[]},
-    {id:'L2',desc:'OT- 6180 LC Harness (Z15-1219)',qty:4,unit:'ea',unitPrice:115.46,shipped:[]},
-  ]},
-  // ── Super Pacific, Inc. — New Orders ────────────────────────
-  {id:'P00700',customer:'Super Pacific, Inc.',cpo:'P00700',rcvd:'2026-03-03',due:'2026-03-18',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
-    {id:'L1',desc:'Dimmer Switch Assembly, no shrink tubing on wires [SP-ACCS-LIGHT-DIM]',qty:50,unit:'ea',unitPrice:59.50,shipped:[]},
-  ]},
-  {id:'P00876',customer:'Super Pacific, Inc.',cpo:'P00876',rcvd:'2026-04-13',due:'2026-05-19',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
-    {id:'L1',desc:'12" F-Series Red/White Light Bar w/Anderson Installed [KING-RTL-FSER-12]',qty:100,unit:'ea',unitPrice:8.52,shipped:[]},
-    {id:'L2',desc:'40" F-Series Red/White Light Bar w/Anderson Installed [KING-RTL-FSER-40]',qty:100,unit:'ea',unitPrice:8.52,shipped:[]},
-  ]},
-  {id:'P00877',customer:'Super Pacific, Inc.',cpo:'P00877',rcvd:'2026-04-13',due:'2026-05-05',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
-    {id:'L1',desc:'Power Ready Harnesses (A&B pair)',qty:50,unit:'ea',unitPrice:198.51,shipped:[]},
-    {id:'L2',desc:'Power Ready LB Extensions (pair)',qty:50,unit:'ea',unitPrice:45.02,shipped:[]},
-    {id:'L3',desc:'Power Ready Fridge (harness only, no plate/socket)',qty:50,unit:'ea',unitPrice:19.27,shipped:[]},
-  ]},
-  {id:'P00946',customer:'Super Pacific, Inc.',cpo:'P00946',rcvd:'2026-04-21',due:'2026-05-13',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
-    {id:'L1',desc:'Power-Ready Fuse Block Panel 4 Circuit [SP-ACCS-12V-FUSEBLOCK]',qty:50,unit:'ea',unitPrice:126.06,shipped:[]},
-  ]},
-  {id:'P00947',customer:'Super Pacific, Inc.',cpo:'P00947',rcvd:'2026-04-21',due:'2026-05-01',so:'',wo:'',cin7:false,fb:false,inherited:false,commitDate:'',notes:'Buyer: NickRaya',lines:[
-    {id:'L1',desc:'Tent Wire Harness, 176"',qty:50,unit:'ea',unitPrice:22.95,shipped:[]},
-  ]},
-];
-
-let pos=[];
-let customers=[];
-let skus=[];
-let settings={...DEFAULT_SETTINGS};
-let expanded={};
-let currentTab='pipeline';
-let nextPoNum=5;
-let filterStatus='';
-let filterCustomer='';
-let filterInherited='';
-let searchQ='';
-let _addPoId='';
-let _addLineId='';
-
-function loadData(){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEY);
-    pos=raw?JSON.parse(raw):JSON.parse(JSON.stringify(SAMPLE_POS));
-    const sr=localStorage.getItem(SETTINGS_KEY);
-    if(sr) settings={...DEFAULT_SETTINGS,...JSON.parse(sr)};
-    const cr=localStorage.getItem(CUSTOMERS_KEY);
-    customers=cr?JSON.parse(cr):[];
-    const skr=localStorage.getItem(SKUS_KEY);
-    skus=skr?JSON.parse(skr):[];
-    // Seed customers from PO data if empty
-    if(!customers.length){
-      const names=[...new Set(pos.map(p=>p.customer).filter(Boolean))].sort();
-      customers=names.map(n=>({name:n}));
-      saveCustomers();
-    }
-    // Seed SKUs from line items if empty
-    if(!skus.length){
-      const seen=new Map();
-      pos.forEach(po=>po.lines.forEach(l=>{
-        if(!seen.has(l.desc)) seen.set(l.desc,{desc:l.desc,unit:l.unit,unitPrice:l.unitPrice});
-      }));
-      skus=[...seen.values()];
-      saveSkus();
-    }
-    nextPoNum=pos.filter(p=>p.id.startsWith('PO-')).reduce((m,p)=>{
-      const n=parseInt(p.id.replace('PO-',''))||0; return Math.max(m,n+1);
-    },5);
-    // Always sync lists from current PO data to catch any gaps
-    syncListsFromPos(pos);
-  }catch(e){pos=JSON.parse(JSON.stringify(SAMPLE_POS));}
+// ── Status indicator ───────────────────────────────────────────
+function setStatus(state,text){
+  const el=document.getElementById('db-status');
+  if(el){el.textContent=text;el.className='db-status '+state;}
 }
-function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(pos));}
-function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));}
-function saveCustomers(){localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(customers));}
-function saveSkus(){localStorage.setItem(SKUS_KEY,JSON.stringify(skus));}
+
+// ── Load all data ──────────────────────────────────────────────
+async function dbLoad(){
+  setStatus('loading','Loading...');
+  try{
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes]=await Promise.all([
+      sb.from('pos').select('*').order('created_at'),
+      sb.from('line_items').select('*').order('sort_order'),
+      sb.from('shipments').select('*').order('created_at'),
+      sb.from('customers').select('*').order('name'),
+      sb.from('skus').select('*').order('description'),
+      sb.from('settings').select('*').eq('id',1).single(),
+    ]);
+    if(posRes.error) throw posRes.error;
+
+    // Build lookup maps
+    const lineMap={};
+    (lineRes.data||[]).forEach(l=>{
+      if(!lineMap[l.po_id]) lineMap[l.po_id]=[];
+      lineMap[l.po_id].push(l);
+    });
+    const shipMap={};
+    (shipRes.data||[]).forEach(s=>{
+      const k=s.po_id+'|'+s.line_id;
+      if(!shipMap[k]) shipMap[k]=[];
+      shipMap[k].push(s);
+    });
+
+    pos=(posRes.data||[]).map(p=>({
+      id:p.id,customer:p.customer,cpo:p.cpo,
+      rcvd:p.rcvd||'',due:p.due||'',commitDate:p.commit_date||'',
+      so:p.so||'',wo:p.wo||'',cin7:!!p.cin7,fb:!!p.fb,
+      inherited:!!p.inherited,notes:p.notes||'',
+      lines:(lineMap[p.id]||[]).map(l=>({
+        id:l.id,desc:l.description,qty:Number(l.qty),
+        unit:l.unit,unitPrice:Number(l.unit_price),
+        shipped:(shipMap[p.id+'|'+l.id]||[]).map(s=>({
+          _id:s.id,date:s.ship_date||'',qty:Number(s.qty),inv:s.inv||''
+        }))
+      }))
+    }));
+
+    customers=(custRes.data||[]).map(c=>({name:c.name}));
+    skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price)}));
+    if(setRes.data){
+      const d=setRes.data;
+      settings={companyName:d.company_name,divisionName:d.division_name,preparedBy:d.prepared_by,monthlyTarget:Number(d.monthly_target),laborCapacity:Number(d.labor_capacity)};
+    }
+    setStatus('ok','● Live');
+    renderContent();
+  }catch(err){
+    console.error(err);
+    setStatus('err','✕ DB Error');
+    document.getElementById('content').innerHTML=`<div class="empty"><div class="empty-title" style="color:var(--red)">Connection failed</div><div style="font-size:12px;margin-top:8px;">${err.message}</div></div>`;
+  }
+}
+
+// ── DB write helpers ───────────────────────────────────────────
+async function dbSavePO(po){
+  const {error}=await sb.from('pos').upsert({
+    id:po.id,customer:po.customer,cpo:po.cpo,
+    rcvd:po.rcvd||null,due:po.due||null,commit_date:po.commitDate||null,
+    so:po.so||'',wo:po.wo||'',cin7:po.cin7,fb:po.fb,
+    inherited:po.inherited,notes:po.notes||'',updated_at:new Date().toISOString()
+  });
+  if(error) throw error;
+}
+
+async function dbSaveLine(poId,line,sortOrder){
+  const {error}=await sb.from('line_items').upsert({
+    id:line.id,po_id:poId,description:line.desc,
+    qty:line.qty,unit:line.unit,unit_price:line.unitPrice,sort_order:sortOrder||0
+  });
+  if(error) throw error;
+}
+
+async function dbSaveShipment(poId,lineId,shipment){
+  if(shipment._id){
+    const {error}=await sb.from('shipments').update({ship_date:shipment.date||null,qty:shipment.qty,inv:shipment.inv||''}).eq('id',shipment._id);
+    if(error) throw error;
+  } else {
+    const {data,error}=await sb.from('shipments').insert({po_id:poId,line_id:lineId,ship_date:shipment.date||null,qty:shipment.qty,inv:shipment.inv||''}).select().single();
+    if(error) throw error;
+    shipment._id=data.id;
+  }
+}
+
+async function dbDeleteShipment(id){const {error}=await sb.from('shipments').delete().eq('id',id);if(error)throw error;}
+async function dbDeleteLine(poId,lineId){const {error}=await sb.from('line_items').delete().eq('po_id',poId).eq('id',lineId);if(error)throw error;}
+async function dbDeletePO(id){const {error}=await sb.from('pos').delete().eq('id',id);if(error)throw error;}
+async function dbSaveCustomer(name){const {error}=await sb.from('customers').upsert({name},{onConflict:'name'});if(error)throw error;}
+async function dbDeleteCustomer(name){const {error}=await sb.from('customers').delete().eq('name',name);if(error)throw error;}
+async function dbSaveSku(sku){const {error}=await sb.from('skus').upsert({description:sku.desc,unit:sku.unit,unit_price:sku.unitPrice},{onConflict:'description'});if(error)throw error;}
+async function dbDeleteSku(desc){const {error}=await sb.from('skus').delete().eq('description',desc);if(error)throw error;}
+async function dbSaveSettings(){
+  const {error}=await sb.from('settings').update({company_name:settings.companyName,division_name:settings.divisionName,prepared_by:settings.preparedBy,monthly_target:settings.monthlyTarget,labor_capacity:settings.laborCapacity}).eq('id',1);
+  if(error)throw error;
+}
+
+// ── Sync lists from new PO data ────────────────────────────────
+async function syncListsFromPos(newPosList){
+  for(const po of newPosList){
+    if(po.customer&&!customers.find(c=>c.name===po.customer)){
+      await dbSaveCustomer(po.customer);
+      customers.push({name:po.customer});
+    }
+    for(const l of(po.lines||[])){
+      if(!l.desc)continue;
+      if(!skus.find(s=>s.desc===l.desc)){
+        const sku={desc:l.desc,unit:l.unit||'ea',unitPrice:l.unitPrice||0};
+        await dbSaveSku(sku);
+        skus.push(sku);
+      }
+    }
+  }
+  customers.sort((a,b)=>a.name.localeCompare(b.name));
+}
+
 // ── Calculations ───────────────────────────────────────────────
 const fmt=n=>'$'+Math.round(n).toLocaleString();
-const fmtD=n=>n!=null&&n!==''?'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
 const poValue=po=>po.lines.reduce((s,l)=>s+l.qty*l.unitPrice,0);
 const lineValue=l=>l.qty*l.unitPrice;
 const lineShippedQty=l=>l.shipped.reduce((s,sh)=>s+sh.qty,0);
@@ -455,8 +335,7 @@ function poStatus(po){
   return'open';
 }
 function lineStatus(l){
-  const openQ=lineOpenQty(l);
-  if(openQ===0)return l.shipped.every(s=>s.inv)?'invoiced':'complete';
+  if(lineOpenQty(l)===0)return l.shipped.every(s=>s.inv)?'invoiced':'complete';
   return lineShippedQty(l)>0?'partial':'open';
 }
 function progBar(p){
@@ -464,33 +343,30 @@ function progBar(p){
   return`<div class="prog-bar"><div class="prog-fill" style="width:${p}%;background:${c};"></div></div>`;
 }
 
-// ── Tab routing ────────────────────────────────────────────────
+// ── Routing ────────────────────────────────────────────────────
 function setTab(tab,el){
   currentTab=tab;
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
   if(el)el.classList.add('active');
   renderContent();
 }
-
 function renderContent(){
-  if(currentTab==='pipeline') renderPipeline();
-  else if(currentTab==='projections') renderProjections();
-  else if(currentTab==='settings') renderSettings();
-  else if(currentTab==='lists') renderLists();
+  if(currentTab==='pipeline')renderPipeline();
+  else if(currentTab==='projections')renderProjections();
+  else if(currentTab==='lists')renderLists();
+  else if(currentTab==='settings')renderSettings();
 }
 
+// ── Pipeline ───────────────────────────────────────────────────
 function renderPipeline(){
   const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
   const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
   const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
   const open=pos.reduce((s,p)=>s+poOpen(p),0);
-  const od=pos.filter(p=>isOverdue(p)).length;
   const inherited=pos.filter(p=>p.inherited).length;
   const inheritedOpen=pos.filter(p=>p.inherited&&poStatus(p)!=='invoiced'&&poStatus(p)!=='complete').length;
-
   const custs=[...new Set(pos.map(p=>p.customer))].sort();
   const custOpts=custs.map(c=>`<option value="${c}"${filterCustomer===c?' selected':''}>${c}</option>`).join('');
-
   const filtered=pos.filter(po=>{
     return(!searchQ||(po.customer+po.cpo+po.id+po.so+po.wo+po.lines.map(l=>l.desc).join(' ')).toLowerCase().includes(searchQ))
       &&(!filterStatus||poStatus(po)===filterStatus)
@@ -499,25 +375,23 @@ function renderPipeline(){
   });
   const overduePos=filtered.filter(p=>isOverdue(p));
   const restPos=filtered.filter(p=>!isOverdue(p));
-
-  let cardsHtml='';
+  let cards='';
   if(overduePos.length){
-    cardsHtml+=`<div class="section-divider">&#9888; Overdue — inherited backlog <span class="divider-badge">${overduePos.length}</span></div>`;
-    cardsHtml+=overduePos.map(poCard).join('');
+    cards+=`<div class="section-divider">&#9888; Overdue <span class="divider-badge">${overduePos.length}</span></div>`;
+    cards+=overduePos.map(poCard).join('');
   }
   if(restPos.length){
-    if(overduePos.length) cardsHtml+=`<div class="section-divider" style="margin-top:16px;">Active orders</div>`;
-    cardsHtml+=restPos.map(poCard).join('');
+    if(overduePos.length) cards+=`<div class="section-divider" style="margin-top:16px;">Active orders</div>`;
+    cards+=restPos.map(poCard).join('');
   }
-  if(!filtered.length) cardsHtml=`<div class="empty"><div class="empty-title">No orders match your filters</div><div>Try adjusting your search or filter</div></div>`;
-
+  if(!filtered.length) cards=`<div class="empty"><div class="empty-title">No orders match your filters</div></div>`;
   document.getElementById('content').innerHTML=`
     <div class="metrics">
       <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
       <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
       <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
       <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
-      <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400;">of ${inherited}</span></div></div>
+      <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400">of ${inherited}</span></div></div>
     </div>
     <div class="toolbar">
       <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" placeholder="Search customer, PO#, part..." value="${searchQ}" oninput="searchQ=this.value;renderPipeline()"/></div>
@@ -530,7 +404,7 @@ function renderPipeline(){
         <option value="overdue"${filterStatus==='overdue'?' selected':''}>Overdue</option>
       </select>
       <select onchange="filterInherited=this.value;renderPipeline()">
-        <option value=""${filterInherited===''?' selected':''}>All orders</option>
+        <option value="">All orders</option>
         <option value="inherited"${filterInherited==='inherited'?' selected':''}>Inherited backlog</option>
         <option value="new"${filterInherited==='new'?' selected':''}>New orders</option>
       </select>
@@ -540,15 +414,18 @@ function renderPipeline(){
       <button class="btn btn-primary" onclick="showAddPO()">+ New PO</button>
       <button class="btn" onclick="exportCSV()">Export CSV</button>
     </div>
-    <div id="po-list">${cardsHtml}</div>`;
+    <div id="po-list">${cards}</div>`;
 }
 
 function poCard(po){
   const st=poStatus(po),p=poPct(po),isOpen=expanded[po.id],od=isOverdue(po);
   const warn=!po.cin7||!po.fb;
-  const inheritedBadge=po.inherited?`<span class="badge" style="background:rgba(79,124,255,.15);color:#7da4ff;margin-left:6px;">inherited</span>`:'<span class="badge" style="background:rgba(34,201,122,.12);color:#22c97a;margin-left:6px;">new</span>';
-  const commitInfo=po.commitDate?`&nbsp;·&nbsp; committed: ${po.commitDate}`:'&nbsp;·&nbsp; <span style="color:var(--red);font-size:10px;">no commit date</span>';
-  const detailHtml=isOpen?`
+  const iTag=po.inherited
+    ?`<span class="badge" style="background:rgba(79,124,255,.15);color:#7da4ff;margin-left:6px;font-size:9px;">inherited</span>`
+    :`<span class="badge" style="background:rgba(34,201,122,.12);color:#22c97a;margin-left:6px;font-size:9px;">new</span>`;
+  const commitInfo=po.commitDate?`&nbsp;·&nbsp; committed: ${po.commitDate}`
+    :`&nbsp;·&nbsp; <span style="color:var(--red);font-size:10px;">no commit date</span>`;
+  const detail=isOpen?`
     <div class="po-detail">
       <div class="detail-grid">
         <div class="field-group"><span class="field-label">Cin7 SO#</span><input class="field-input" type="text" value="${po.so}" placeholder="Enter SO#" onchange="saveField('${po.id}','so',this.value)"/></div>
@@ -567,185 +444,204 @@ function poCard(po){
         <button class="btn btn-xs btn-danger" onclick="removePO('${po.id}')">Delete PO</button>
         <span class="saved-msg" id="flash-${po.id}">✓ saved</span>
       </div>
-    </div>
-    ${linesHtml(po)}`:'';
-
+    </div>${linesSection(po)}`:'';
   return`<div class="po-card${od?' overdue':''}">
     <div class="po-header" onclick="togglePO('${po.id}')">
       <span class="chevron${isOpen?' open':''}">&#9658;</span>
-      <div>
-        <div class="po-customer">${po.customer}${inheritedBadge}</div>
-        <div class="po-meta">PO: ${po.cpo} &nbsp;·&nbsp; SO: ${po.so||'—'} &nbsp;·&nbsp; WO: ${po.wo||'—'}${warn?' &nbsp;·&nbsp; ⚠ needs entry':''}</div>
-      </div>
-      <div>
-        <div class="po-lines-info">${po.lines.length} line${po.lines.length!==1?'s':''} &nbsp;·&nbsp; orig due: ${po.due||'—'}${commitInfo}</div>
-        <div class="prog-wrap">${progBar(p)}<span class="prog-pct">${p}%</span></div>
-      </div>
+      <div><div class="po-customer">${po.customer}${iTag}</div>
+        <div class="po-meta">PO: ${po.cpo} &nbsp;·&nbsp; SO: ${po.so||'—'} &nbsp;·&nbsp; WO: ${po.wo||'—'}${warn?' &nbsp;·&nbsp; ⚠ needs entry':''}</div></div>
+      <div><div class="po-lines-info">${po.lines.length} line${po.lines.length!==1?'s':''} &nbsp;·&nbsp; due: ${po.due||'—'}${commitInfo}</div>
+        <div class="prog-wrap">${progBar(p)}<span class="prog-pct">${p}%</span></div></div>
       <div class="col-val"><div class="col-label">value</div><div class="col-num">${fmt(poValue(po))}</div></div>
       <div class="col-val"><div class="col-label">shipped</div><div class="col-num amber">${fmt(poShipped(po))}</div></div>
       <div class="col-val"><div class="col-label">invoiced</div><div class="col-num green">${fmt(poInvoiced(po))}</div></div>
       <div class="col-val"><div class="col-label">open</div><div class="col-num">${fmt(poOpen(po))}</div></div>
-      <span class="badge ${st}">${st}</span>
-      <div></div>
-    </div>
-    ${detailHtml}
-  </div>`;
+      <span class="badge ${st}">${st}</span><div></div>
+    </div>${detail}</div>`;
 }
 
-function linesHtml(po){
+function linesSection(po){
   const rows=po.lines.map(l=>{
     const shQ=lineShippedQty(l),openQ=lineOpenQty(l),shV=lineShippedVal(l),lv=lineValue(l);
     const lp=lv>0?Math.round(shQ/l.qty*100):0;
     const lst=lineStatus(l);
-    const shipsHtml=l.shipped.length>0?`
+    const ships=l.shipped.length>0?`
       <div class="shipments" onclick="event.stopPropagation()">
         <div class="ship-header"><span>Date</span><span>Qty</span><span>Value</span><span>Invoice#</span><span></span></div>
         ${l.shipped.map((sh,si)=>`<div class="ship-row">
-          <span>${sh.date}</span>
-          <span>${sh.qty} ${l.unit}</span>
-          <span>${fmt(sh.qty*l.unitPrice)}</span>
+          <span>${sh.date||'—'}</span><span>${sh.qty} ${l.unit}</span><span>${fmt(sh.qty*l.unitPrice)}</span>
           <input class="ship-inv" type="text" value="${sh.inv}" placeholder="invoice#" onchange="setShipInv('${po.id}','${l.id}',${si},this.value)"/>
           <button class="btn-ghost" onclick="removeShipment('${po.id}','${l.id}',${si})">remove</button>
         </div>`).join('')}
       </div>`:'';
     return`<div class="line-row" style="flex-wrap:wrap;">
       <div class="line-desc" title="${l.desc}">${l.desc}</div>
-      <div class="line-num">${l.qty}</div>
-      <div class="line-num">${fmt(l.unitPrice)}</div>
-      <div class="line-num">${fmt(lv)}</div>
+      <div class="line-num">${l.qty}</div><div class="line-num">${fmt(l.unitPrice)}</div><div class="line-num">${fmt(lv)}</div>
       <div class="line-num" style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">${progBar(lp)}<span style="font-size:10px;">${shQ}/${l.qty}</span></div>
-      <div class="line-num amber">${fmt(shV)}</div>
-      <div class="line-num">${fmt(openQ*l.unitPrice)}</div>
+      <div class="line-num amber">${fmt(shV)}</div><div class="line-num">${fmt(openQ*l.unitPrice)}</div>
       <span class="badge ${lst}" style="justify-self:end;">${lst}</span>
       <div class="line-actions">
         <button class="btn btn-xs" onclick="showAddShipment('${po.id}','${l.id}')">+ Ship</button>
         <button class="btn btn-xs btn-danger" onclick="removeLine('${po.id}','${l.id}')">✕</button>
       </div>
-      ${l.shipped.length>0?`<div style="grid-column:1/-1;">${shipsHtml}</div>`:''}
+      ${l.shipped.length>0?`<div style="grid-column:1/-1;">${ships}</div>`:''}
     </div>`;
   }).join('');
-
   return`<div class="lines-section" onclick="event.stopPropagation()">
-    <div class="lines-header">
-      <span>Description</span><span style="text-align:right">Qty</span><span style="text-align:right">Unit $</span>
-      <span style="text-align:right">Value</span><span style="text-align:right">Fulfilled</span>
-      <span style="text-align:right">Shipped $</span><span style="text-align:right">Open $</span>
-      <span style="text-align:right">Status</span><span></span>
-    </div>
-    ${rows}
+    <div class="lines-header"><span>Description</span><span>Qty</span><span>Unit $</span><span>Value</span><span>Fulfilled</span><span>Shipped $</span><span>Open $</span><span>Status</span><span></span></div>
+    ${rows||'<div style="padding:8px 0;font-size:12px;color:var(--text3);">No lines yet — click + Add line</div>'}
   </div>`;
 }
 
 // ── Projections ────────────────────────────────────────────────
 function renderProjections(){
-  // Helper: month key from a date string
-  const monthKey=dateStr=>{
-    if(!dateStr)return null;
-    const d=new Date(dateStr);
-    if(isNaN(d))return null;
-    return{key:d.toLocaleString('default',{month:'short',year:'numeric'}),d};
-  };
-
-  // Build month buckets
-  // PO value and open: grouped by due date (what's owed by month)
-  // Shipped and invoiced: grouped by actual ship date (what actually moved)
-  const dueBuckets={};   // key -> {rev, open, d}
-  const shipBuckets={};  // key -> {shipped, invoiced, d}
-
+  const mKey=ds=>{if(!ds)return null;const d=new Date(ds);if(isNaN(d))return null;return{key:d.toLocaleString('default',{month:'short',year:'numeric'}),d};};
+  const dueB={},shipB={};
   pos.forEach(po=>{
-    // Due-date bucket: total PO value and open balance
-    const due=monthKey(po.due);
+    const due=mKey(po.due);
     if(due){
-      if(!dueBuckets[due.key]) dueBuckets[due.key]={rev:0,open:0,d:due.d};
-      dueBuckets[due.key].rev+=poValue(po);
-      dueBuckets[due.key].open+=poOpen(po);
+      if(!dueB[due.key])dueB[due.key]={rev:0,open:0,d:due.d};
+      dueB[due.key].rev+=poValue(po);dueB[due.key].open+=poOpen(po);
     }
-
-    // Ship-date buckets: iterate every shipment on every line
-    po.lines.forEach(l=>{
-      l.shipped.forEach(sh=>{
-        const sm=monthKey(sh.date);
-        if(!sm)return;
-        if(!shipBuckets[sm.key]) shipBuckets[sm.key]={shipped:0,invoiced:0,d:sm.d};
-        const val=sh.qty*l.unitPrice;
-        shipBuckets[sm.key].shipped+=val;
-        if(sh.inv) shipBuckets[sm.key].invoiced+=val;
-      });
-    });
+    po.lines.forEach(l=>l.shipped.forEach(sh=>{
+      const sm=mKey(sh.date);if(!sm)return;
+      if(!shipB[sm.key])shipB[sm.key]={shipped:0,invoiced:0,d:sm.d};
+      const v=sh.qty*l.unitPrice;
+      shipB[sm.key].shipped+=v;if(sh.inv)shipB[sm.key].invoiced+=v;
+    }));
   });
-
-  // Merge all month keys for the table
-  const allKeys=new Set([...Object.keys(dueBuckets),...Object.keys(shipBuckets)]);
+  const allKeys=new Set([...Object.keys(dueB),...Object.keys(shipB)]);
   const months=[...allKeys].map(key=>{
-    const due=dueBuckets[key]||{rev:0,open:0,d:new Date(key)};
-    const ship=shipBuckets[key]||{shipped:0,invoiced:0};
-    // Sort date: prefer the real date object
-    const d=due.d||ship.d||new Date(key);
-    return{key,d,rev:due.rev,open:due.open,shipped:ship.shipped,invoiced:ship.invoiced};
+    const due=dueB[key]||{rev:0,open:0,d:new Date(key)};
+    const ship=shipB[key]||{shipped:0,invoiced:0};
+    return{key,d:due.d||ship.d,rev:due.rev,open:due.open,shipped:ship.shipped,invoiced:ship.invoiced};
   }).sort((a,b)=>a.d-b.d);
-
-  const totalRev=pos.reduce((s,p)=>s+poValue(p),0);
-  const totalOpen=pos.reduce((s,p)=>s+poOpen(p),0);
-  const totalShipped=pos.reduce((s,p)=>s+poShipped(p),0);
-  const totalInvoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
-
-  const monthRows=months.map((m,i)=>`
+  const tRev=pos.reduce((s,p)=>s+poValue(p),0);
+  const tOpen=pos.reduce((s,p)=>s+poOpen(p),0);
+  const tShip=pos.reduce((s,p)=>s+poShipped(p),0);
+  const tInv=pos.reduce((s,p)=>s+poInvoiced(p),0);
+  const mRows=months.map((m,i)=>`
     <div class="proj-table-row proj-5col" style="${i%2?'':'background:rgba(255,255,255,.02)'}">
-      <span>${m.key}</span>
-      <span class="proj-val">${m.rev>0?fmt(m.rev):'—'}</span>
+      <span>${m.key}</span><span class="proj-val">${m.rev>0?fmt(m.rev):'—'}</span>
       <span class="proj-val amber">${m.shipped>0?fmt(m.shipped):'—'}</span>
       <span class="proj-val green">${m.invoiced>0?fmt(m.invoiced):'—'}</span>
       <span class="proj-val">${m.open>0?fmt(m.open):'—'}</span>
     </div>`).join('');
-
   const custMap={};
-  pos.forEach(po=>{
-    if(!custMap[po.customer])custMap[po.customer]={rev:0,invoiced:0,open:0};
-    custMap[po.customer].rev+=poValue(po);
-    custMap[po.customer].invoiced+=poInvoiced(po);
-    custMap[po.customer].open+=poOpen(po);
-  });
-  const custRows=Object.entries(custMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d],i)=>`
+  pos.forEach(po=>{if(!custMap[po.customer])custMap[po.customer]={rev:0,invoiced:0,open:0};custMap[po.customer].rev+=poValue(po);custMap[po.customer].invoiced+=poInvoiced(po);custMap[po.customer].open+=poOpen(po);});
+  const cRows=Object.entries(custMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d],i)=>`
     <div class="proj-table-row" style="grid-template-columns:2fr 1fr 1fr 1fr;${i%2?'':'background:rgba(255,255,255,.02)'}">
-      <span>${c}</span>
-      <span class="proj-val">${fmt(d.rev)}</span>
-      <span class="proj-val green">${fmt(d.invoiced)}</span>
-      <span class="proj-val amber">${fmt(d.open)}</span>
+      <span>${c}</span><span class="proj-val">${fmt(d.rev)}</span><span class="proj-val green">${fmt(d.invoiced)}</span><span class="proj-val amber">${fmt(d.open)}</span>
     </div>`).join('');
-
   document.getElementById('content').innerHTML=`
     <div class="proj-grid">
-      <div class="metric"><div class="metric-label">Total pipeline</div><div class="metric-value">${fmt(totalRev)}</div><div class="metric-sub">${pos.length} POs · ${pos.reduce((s,p)=>s+p.lines.length,0)} lines</div></div>
-      <div class="metric"><div class="metric-label">Invoiced to date</div><div class="metric-value green">${fmt(totalInvoiced)}</div><div class="metric-sub">${totalRev>0?Math.round(totalInvoiced/totalRev*100):0}% of pipeline</div></div>
-      <div class="metric"><div class="metric-label">Still open</div><div class="metric-value amber">${fmt(totalOpen)}</div><div class="metric-sub">Remaining to fulfill</div></div>
+      <div class="metric"><div class="metric-label">Total pipeline</div><div class="metric-value">${fmt(tRev)}</div><div class="metric-sub">${pos.length} POs</div></div>
+      <div class="metric"><div class="metric-label">Invoiced to date</div><div class="metric-value green">${fmt(tInv)}</div><div class="metric-sub">${tRev>0?Math.round(tInv/tRev*100):0}% of pipeline</div></div>
+      <div class="metric"><div class="metric-label">Still open</div><div class="metric-value amber">${fmt(tOpen)}</div></div>
     </div>
-
-    <div class="proj-table" style="margin-bottom:16px;">
-      <div style="padding:8px 14px 4px;font-size:10px;color:var(--text3);font-family:var(--mono);">
-        PO value &amp; open = grouped by due date &nbsp;·&nbsp; Shipped &amp; invoiced = grouped by actual ship date
-      </div>
-      <div class="proj-table-header proj-5col"><span>Month</span><span class="proj-val">PO value due</span><span class="proj-val">Shipped</span><span class="proj-val">Invoiced</span><span class="proj-val">Open balance</span></div>
-      ${monthRows}
-      <div class="proj-table-row proj-5col total">
-        <span>TOTAL</span>
-        <span class="proj-val">${fmt(totalRev)}</span>
-        <span class="proj-val amber">${fmt(totalShipped)}</span>
-        <span class="proj-val green">${fmt(totalInvoiced)}</span>
-        <span class="proj-val">${fmt(totalOpen)}</span>
-      </div>
-    </div>
-
     <div class="proj-table">
-      <div class="proj-table-header" style="grid-template-columns:2fr 1fr 1fr 1fr;">
-        <span>Customer</span><span class="proj-val">Total value</span><span class="proj-val">Invoiced</span><span class="proj-val">Open</span>
-      </div>
-      ${custRows}
+      <div style="padding:8px 14px 4px;font-size:10px;color:var(--text3);font-family:var(--mono);">PO value &amp; open = grouped by due date &nbsp;·&nbsp; Shipped &amp; invoiced = grouped by actual ship date</div>
+      <div class="proj-table-header proj-5col"><span>Month</span><span class="proj-val">PO value due</span><span class="proj-val">Shipped</span><span class="proj-val">Invoiced</span><span class="proj-val">Open balance</span></div>
+      ${mRows}
+      <div class="proj-table-row proj-5col total-row"><span>TOTAL</span><span class="proj-val">${fmt(tRev)}</span><span class="proj-val amber">${fmt(tShip)}</span><span class="proj-val green">${fmt(tInv)}</span><span class="proj-val">${fmt(tOpen)}</span></div>
+    </div>
+    <div class="proj-table">
+      <div class="proj-table-header" style="grid-template-columns:2fr 1fr 1fr 1fr;"><span>Customer</span><span class="proj-val">Total value</span><span class="proj-val">Invoiced</span><span class="proj-val">Open</span></div>
+      ${cRows}
     </div>`;
 }
+
+// ── Lists (Customers & SKUs) ───────────────────────────────────
+function renderLists(){
+  const cRows=customers.map(c=>`
+    <div class="settings-row">
+      <input class="settings-input" type="text" value="${c.name}" style="flex:1;width:auto;"
+        onchange="renameCustomer('${c.name.replace(/'/g,"\\'")}',this.value)"/>
+      <span style="font-size:11px;color:var(--text3);margin:0 8px;">${pos.filter(p=>p.customer===c.name).length} POs</span>
+      <button class="btn btn-danger btn-xs" onclick="deleteCustomer('${c.name.replace(/'/g,"\\'")}')">Remove</button>
+    </div>`).join('');
+  const sRows=skus.map(s=>`
+    <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
+      <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.desc}">${s.desc}</span>
+      <input class="settings-input" type="text" value="${s.unit}" style="width:100%;font-size:12px;" onchange="updateSkuUnit('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
+      <input class="settings-input" type="number" value="${s.unitPrice}" step="0.01" style="width:100%;font-size:12px;" onchange="updateSkuPrice('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
+      <button class="btn btn-danger btn-xs" onclick="deleteSku('${s.desc.replace(/'/g,"\\'")}')">✕</button>
+    </div>`).join('');
+  document.getElementById('content').innerHTML=`
+    <div class="settings-card">
+      <h3>Customers <span style="font-size:12px;font-weight:400;color:var(--text3);">— edit name to rename across all POs; matching names will merge</span></h3>
+      ${cRows||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">No customers yet</div>'}
+      <div class="settings-row" style="margin-top:8px;gap:8px;">
+        <input id="new-cust-input" class="settings-input" type="text" placeholder="New customer name" style="flex:1;width:auto;"/>
+        <button class="btn btn-primary" onclick="addCustomer()">+ Add</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <h3>SKU library <span style="font-size:12px;font-weight:400;color:var(--text3);">— ${skus.length} saved · autocomplete when adding lines</span></h3>
+      <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border2);">
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Description</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Unit</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Unit price</span>
+        <span></span>
+      </div>
+      ${sRows||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">No SKUs yet</div>'}
+      <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;margin-top:12px;align-items:end;">
+        <div><div class="field-label" style="margin-bottom:4px;">Description *</div><input id="new-sku-desc" class="settings-input" type="text" placeholder="Part name" style="width:100%;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Unit</div><input id="new-sku-unit" class="settings-input" type="text" value="ea" style="width:100%;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Price ($)</div><input id="new-sku-price" class="settings-input" type="number" step="0.01" placeholder="0.00" style="width:100%;"/></div>
+        <button class="btn btn-primary" style="align-self:end;" onclick="addSku()">+ Add</button>
+      </div>
+    </div>`;
+}
+
+async function renameCustomer(oldName,newName){
+  newName=newName.trim();if(!newName||newName===oldName)return;
+  const alreadyExists=customers.find(c=>c.name===newName);
+  if(alreadyExists){if(!confirm(`"${newName}" already exists. Merge all POs from "${oldName}" into "${newName}"?`))return;}
+  const {error}=await sb.from('pos').update({customer:newName}).eq('customer',oldName);
+  if(error){alert('Error: '+error.message);return;}
+  pos.forEach(p=>{if(p.customer===oldName)p.customer=newName;});
+  if(!alreadyExists){await dbSaveCustomer(newName);customers.push({name:newName});}
+  await dbDeleteCustomer(oldName);
+  customers=customers.filter(c=>c.name!==oldName);
+  customers.sort((a,b)=>a.name.localeCompare(b.name));
+  renderLists();
+}
+async function deleteCustomer(name){
+  if(pos.some(p=>p.customer===name)){alert(`Cannot delete "${name}" — active POs exist.`);return;}
+  if(!confirm(`Delete "${name}"?`))return;
+  await dbDeleteCustomer(name);customers=customers.filter(c=>c.name!==name);renderLists();
+}
+async function addCustomer(){
+  const name=document.getElementById('new-cust-input')?.value.trim();
+  if(!name){alert('Enter a name.');return;}
+  if(customers.find(c=>c.name===name)){alert('Already exists.');return;}
+  await dbSaveCustomer(name);customers.push({name});customers.sort((a,b)=>a.name.localeCompare(b.name));renderLists();
+}
+async function deleteSku(desc){
+  if(!confirm(`Remove "${desc}"?`))return;
+  await dbDeleteSku(desc);skus=skus.filter(s=>s.desc!==desc);renderLists();
+}
+async function addSku(){
+  const desc=document.getElementById('new-sku-desc')?.value.trim();
+  const unit=document.getElementById('new-sku-unit')?.value.trim()||'ea';
+  const unitPrice=parseFloat(document.getElementById('new-sku-price')?.value)||0;
+  if(!desc){alert('Enter a description.');return;}
+  if(skus.find(s=>s.desc===desc)){alert('Already exists.');return;}
+  await dbSaveSku({desc,unit,unitPrice});skus.push({desc,unit,unitPrice});renderLists();
+}
+async function updateSkuPrice(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.unitPrice=parseFloat(val)||0;await dbSaveSku(s);}}
+async function updateSkuUnit(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.unit=val.trim();await dbSaveSku(s);}}
 
 // ── Settings ───────────────────────────────────────────────────
 function renderSettings(){
   document.getElementById('content').innerHTML=`
+    <div class="migrate-box">
+      <h3>One-time local data migration</h3>
+      <p>If you have data in your browser's local storage from before the database was connected, click below to migrate it into Supabase. Duplicate POs will be skipped automatically.</p>
+      <button class="btn btn-primary" id="migrate-btn" onclick="migrateFromLocalStorage()">Migrate local data to database</button>
+      <span id="migrate-msg" style="font-size:12px;color:var(--text3);margin-left:12px;"></span>
+    </div>
     <div class="settings-card">
       <h3>Company info</h3>
       <div class="settings-row"><span class="settings-label">Company name</span><input class="settings-input" type="text" value="${settings.companyName}" onchange="saveSetting('companyName',this.value)"/></div>
@@ -758,198 +654,77 @@ function renderSettings(){
       <div class="settings-row"><span class="settings-label">Monthly labor capacity (hrs)</span><input class="settings-input" type="number" value="${settings.laborCapacity}" onchange="saveSetting('laborCapacity',parseFloat(this.value)||0)"/></div>
     </div>
     <div class="settings-card">
-      <h3>Data management</h3>
-      <div class="settings-row"><span class="settings-label">Export all data to CSV</span><button class="btn" onclick="exportCSV()">Export CSV</button></div>
-      <div class="settings-row"><span class="settings-label">Backup data to JSON</span><button class="btn" onclick="exportJSON()">Download backup</button></div>
-      <div class="settings-row"><span class="settings-label">Restore from backup</span><button class="btn" onclick="document.getElementById('import-file').click()">Upload backup file</button></div>
-      <div class="settings-row"><span class="settings-label" style="color:var(--red)">Clear all data</span><button class="btn btn-danger" onclick="clearAll()">Clear all data</button></div>
+      <h3>Data export</h3>
+      <div class="settings-row"><span class="settings-label">Export all pipeline data to CSV</span><button class="btn" onclick="exportCSV()">Export CSV</button></div>
     </div>`;
 }
-function saveSetting(k,v){settings[k]=v;saveSettings();}
-
-function renameCustomer(oldName,newName){
-  newName=newName.trim();
-  if(!newName||newName===oldName)return;
-  if(customers.find(c=>c.name===newName)){
-    if(!confirm(`"${newName}" already exists. Merge all POs from "${oldName}" into "${newName}"?`))return;
-  }
-  // Update all POs
-  pos.forEach(p=>{if(p.customer===oldName)p.customer=newName;});
-  // Update customer list
-  const existing=customers.find(c=>c.name===newName);
-  if(existing){
-    customers=customers.filter(c=>c.name!==oldName);
-  } else {
-    const c=customers.find(c=>c.name===oldName);
-    if(c) c.name=newName;
-  }
-  customers.sort((a,b)=>a.name.localeCompare(b.name));
-  saveData();saveCustomers();renderContent();
-}
-
-function deleteCustomer(name){
-  const inUse=pos.some(p=>p.customer===name);
-  if(inUse){alert(`Cannot delete "${name}" — they have active POs. Reassign or delete those POs first.`);return;}
-  if(!confirm(`Delete customer "${name}"?`))return;
-  customers=customers.filter(c=>c.name!==name);
-  saveCustomers();renderLists();
-}
-
-function addCustomer(){
-  const name=document.getElementById('new-cust-input')?.value.trim();
-  if(!name){alert('Enter a customer name.');return;}
-  if(customers.find(c=>c.name===name)){alert('Customer already exists.');return;}
-  customers.push({name});
-  customers.sort((a,b)=>a.name.localeCompare(b.name));
-  saveCustomers();renderLists();
-}
-
-function deleteSku(desc){
-  if(!confirm(`Remove "${desc}" from SKU library?`))return;
-  skus=skus.filter(s=>s.desc!==desc);
-  saveSkus();renderLists();
-}
-
-function addSku(){
-  const desc=document.getElementById('new-sku-desc')?.value.trim();
-  const unit=document.getElementById('new-sku-unit')?.value.trim()||'ea';
-  const price=parseFloat(document.getElementById('new-sku-price')?.value)||0;
-  if(!desc){alert('Enter a description.');return;}
-  if(skus.find(s=>s.desc===desc)){alert('SKU already exists. Edit it in the list below.');return;}
-  skus.push({desc,unit,unitPrice:price});
-  saveSkus();renderLists();
-}
-
-function updateSkuPrice(desc,val){
-  const s=skus.find(x=>x.desc===desc);
-  if(s){s.unitPrice=parseFloat(val)||0;saveSkus();}
-}
-function updateSkuUnit(desc,val){
-  const s=skus.find(x=>x.desc===desc);
-  if(s){s.unit=val.trim();saveSkus();}
-}
-
-function renderLists(){
-  const custRows=customers.map((c,i)=>`
-    <div class="settings-row">
-      <input class="settings-input" type="text" value="${c.name}" style="flex:1;width:auto;"
-        onchange="renameCustomer('${c.name}',this.value)"
-        onblur="renameCustomer('${c.name}',this.value)"/>
-      <span style="font-size:11px;color:var(--text3);margin:0 8px;">${pos.filter(p=>p.customer===c.name).length} POs</span>
-      <button class="btn btn-danger btn-xs" onclick="deleteCustomer('${c.name}')">Remove</button>
-    </div>`).join('');
-
-  const skuRows=skus.map((s,i)=>`
-    <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
-      <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.desc}">${s.desc}</span>
-      <input class="settings-input" type="text" value="${s.unit}" style="width:100%;font-size:12px;" onchange="updateSkuUnit('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
-      <input class="settings-input" type="number" value="${s.unitPrice}" step="0.01" style="width:100%;font-size:12px;" onchange="updateSkuPrice('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
-      <button class="btn btn-danger btn-xs" onclick="deleteSku('${s.desc.replace(/'/g,"\\'")}')">✕</button>
-    </div>`).join('');
-
-  document.getElementById('content').innerHTML=`
-    <div class="settings-card">
-      <h3>Customers <span style="font-size:12px;font-weight:400;color:var(--text3);">— edit names to rename across all POs, or merge duplicates</span></h3>
-      ${custRows}
-      <div class="settings-row" style="margin-top:8px;gap:8px;">
-        <input id="new-cust-input" class="settings-input" type="text" placeholder="New customer name" style="flex:1;width:auto;"/>
-        <button class="btn btn-primary" onclick="addCustomer()">+ Add</button>
-      </div>
-    </div>
-    <div class="settings-card">
-      <h3>SKU library <span style="font-size:12px;font-weight:400;color:var(--text3);">— ${skus.length} saved · used for autocomplete when adding lines</span></h3>
-      <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border2);">
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">Description</span>
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">Unit</span>
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">Unit price</span>
-        <span></span>
-      </div>
-      ${skuRows}
-      <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;margin-top:12px;align-items:end;">
-        <div><div class="field-label" style="margin-bottom:4px;">Description *</div><input id="new-sku-desc" class="settings-input" type="text" placeholder="Part / assembly name" style="width:100%;"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Unit</div><input id="new-sku-unit" class="settings-input" type="text" value="ea" style="width:100%;"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Unit price ($)</div><input id="new-sku-price" class="settings-input" type="number" step="0.01" placeholder="0.00" style="width:100%;"/></div>
-        <button class="btn btn-primary" style="align-self:end;" onclick="addSku()">+ Add</button>
-      </div>
-    </div>`;
-}
+async function saveSetting(k,v){settings[k]=v;await dbSaveSettings();}
 
 // ── Actions ────────────────────────────────────────────────────
 function togglePO(id){expanded[id]=!expanded[id];renderContent();}
 
-function saveField(poId,field,value){
+async function saveField(poId,field,value){
   const po=pos.find(p=>p.id===poId);if(!po)return;
   po[field]=value;
-  if(field==='so') po.cin7=!!value.trim();
-  if(field==='wo') po.fb=!!value.trim();
-  saveData();
-  const flash=document.getElementById('flash-'+poId);
-  if(flash){flash.style.opacity='1';setTimeout(()=>{if(flash)flash.style.opacity='0';},1500);}
-  renderMetricsOnly();
+  if(field==='so')po.cin7=!!value.trim();
+  if(field==='wo')po.fb=!!value.trim();
+  try{
+    await dbSavePO(po);
+    const f=document.getElementById('flash-'+poId);
+    if(f){f.style.opacity='1';setTimeout(()=>{if(f)f.style.opacity='0';},1500);}
+  }catch(e){console.error(e);}
 }
 
-function renderMetricsOnly(){
-  if(currentTab!=='pipeline')return;
-  const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
-  const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
-  const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
-  const open=pos.reduce((s,p)=>s+poOpen(p),0);
-  const inherited=pos.filter(p=>p.inherited).length;
-  const inheritedOpen=pos.filter(p=>p.inherited&&poStatus(p)!=='invoiced'&&poStatus(p)!=='complete').length;
-  const m=document.querySelector('.metrics');
-  if(m) m.innerHTML=`
-    <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
-    <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
-    <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
-    <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
-    <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400;">of ${inherited}</span></div></div>`;
-}
-
-function removePO(id){
+async function removePO(id){
   if(!confirm('Delete this PO? This cannot be undone.'))return;
-  pos=pos.filter(p=>p.id!==id);
-  saveData();renderContent();
+  await dbDeletePO(id);pos=pos.filter(p=>p.id!==id);renderContent();
 }
-function removeLine(poId,lId){
-  const po=pos.find(p=>p.id===poId);
-  if(po&&confirm('Delete this line?')){po.lines=po.lines.filter(l=>l.id!==lId);saveData();renderContent();}
+async function removeLine(poId,lId){
+  if(!confirm('Delete this line?'))return;
+  await dbDeleteLine(poId,lId);
+  const po=pos.find(p=>p.id===poId);if(po)po.lines=po.lines.filter(l=>l.id!==lId);
+  renderContent();
 }
-function removeShipment(poId,lId,si){
+async function removeShipment(poId,lId,si){
+  if(!confirm('Remove this shipment?'))return;
   const po=pos.find(p=>p.id===poId);
-  const l=po&&po.lines.find(x=>x.id===lId);
-  if(l&&confirm('Remove this shipment?')){l.shipped.splice(si,1);saveData();renderContent();}
+  const l=po&&po.lines.find(x=>x.id===lId);if(!l)return;
+  const sh=l.shipped[si];
+  if(sh._id)await dbDeleteShipment(sh._id);
+  l.shipped.splice(si,1);renderContent();
 }
-function setShipInv(poId,lId,si,val){
+async function setShipInv(poId,lId,si,val){
   const po=pos.find(p=>p.id===poId);
-  const l=po&&po.lines.find(x=>x.id===lId);
-  if(l&&l.shipped[si]!==undefined){l.shipped[si].inv=val.trim();saveData();renderMetricsOnly();}
+  const l=po&&po.lines.find(x=>x.id===lId);if(!l)return;
+  l.shipped[si].inv=val.trim();
+  await dbSaveShipment(poId,lId,l.shipped[si]);
 }
 
 // ── Modals ─────────────────────────────────────────────────────
 function closeModal(){document.getElementById('modal-area').innerHTML='';}
 
 function showAddPO(){
-  const custOpts=customers.map(c=>`<option value="${c.name}"/>`).join('');
+  const cOpts=customers.map(c=>`<option value="${c.name}"/>`).join('');
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <div class="modal-title">New purchase order</div>
-      <datalist id="dl-customers">${custOpts}</datalist>
+      <datalist id="dl-c">${cOpts}</datalist>
       <div class="modal-grid">
-        <div><div class="field-label" style="margin-bottom:4px;">Customer *</div><input id="m-cust" type="text" list="dl-customers" placeholder="Type or select customer"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Customer *</div><input id="m-cust" type="text" list="dl-c" placeholder="Type or select"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Customer PO# *</div><input id="m-cpo" type="text" placeholder="PO number"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Date received</div><input id="m-rcvd" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Original due date</div><input id="m-due" type="date"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Committed ship date</div><input id="m-commit" type="date"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Cin7 SO# (optional)</div><input id="m-so" type="text" placeholder="SO#"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Fishbowl WO# (optional)</div><input id="m-wo" type="text" placeholder="WO#"/></div>
-        <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px;">
+        <div><div class="field-label" style="margin-bottom:4px;">Cin7 SO#</div><input id="m-so" type="text" placeholder="Optional"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Fishbowl WO#</div><input id="m-wo" type="text" placeholder="Optional"/></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:4px;">
           <label class="chk-label"><input type="checkbox" id="m-inherited"/> Inherited backlog</label>
         </div>
         <div class="full"><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="m-notes" type="text" placeholder="Internal notes"/></div>
       </div>
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="submitAddPO()">Add PO</button>
+        <button class="btn btn-primary" id="add-po-btn" onclick="submitAddPO()">Add PO</button>
       </div>
     </div>
   </div>`;
@@ -958,21 +733,18 @@ function showAddPO(){
 function showAddLine(poId){
   _addPoId=poId;
   const po=pos.find(p=>p.id===poId);
-  const skuOpts=skus.map(s=>`<option value="${s.desc}" data-unit="${s.unit}" data-price="${s.unitPrice}"/>`).join('');
+  const sOpts=skus.map(s=>`<option value="${s.desc}"/>`).join('');
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <div class="modal-title">Add line — ${po.customer} / ${po.cpo}</div>
-      <datalist id="dl-skus">${skuOpts}</datalist>
+      <datalist id="dl-s">${sOpts}</datalist>
       <div class="modal-grid">
-        <div class="full"><div class="field-label" style="margin-bottom:4px;">Description / part *</div>
-          <input id="m-desc" type="text" list="dl-skus" placeholder="Type or select from saved SKUs" oninput="autoFillSku(this.value)"/>
-        </div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Description *</div>
+          <input id="m-desc" type="text" list="dl-s" placeholder="Type or select from SKU library" oninput="autoFillSku(this.value)"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Qty ordered</div><input id="m-qty" type="number" min="1" value="1"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Unit</div><input id="m-unit" type="text" value="ea"/></div>
         <div class="full"><div class="field-label" style="margin-bottom:4px;">Unit price ($)</div><input id="m-price" type="number" min="0" step="0.01" value="0"/></div>
-        <div class="full" style="display:flex;align-items:center;gap:8px;">
-          <label class="chk-label"><input type="checkbox" id="m-savesku" checked/> Save to SKU library</label>
-        </div>
+        <div class="full"><label class="chk-label"><input type="checkbox" id="m-savesku" checked/> Save to SKU library</label></div>
       </div>
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">Cancel</button>
@@ -990,11 +762,11 @@ function showAddShipment(poId,lId){
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <div class="modal-title">Record shipment</div>
-      <div class="modal-note">${l.desc}<br>Open qty: <strong>${openQty} ${l.unit}</strong> &nbsp;·&nbsp; Unit price: <strong>${fmt(l.unitPrice)}</strong></div>
+      <div class="modal-note">${l.desc}<br>Open: <strong>${openQty} ${l.unit}</strong> &nbsp;·&nbsp; Unit price: <strong>${fmt(l.unitPrice)}</strong></div>
       <div class="modal-grid">
         <div><div class="field-label" style="margin-bottom:4px;">Ship date</div><input id="m-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Qty shipped</div><input id="m-sqty" type="number" min="1" max="${openQty}" value="${openQty}"/></div>
-        <div class="full"><div class="field-label" style="margin-bottom:4px;">Invoice# (leave blank if not yet invoiced)</div><input id="m-inv" type="text" placeholder="Invoice number"/></div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Invoice# (optional)</div><input id="m-inv" type="text" placeholder="Leave blank if not yet invoiced"/></div>
       </div>
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">Cancel</button>
@@ -1007,220 +779,173 @@ function showAddShipment(poId,lId){
 function autoFillSku(val){
   const sku=skus.find(s=>s.desc===val);
   if(sku){
-    const uEl=document.getElementById('m-unit');
-    const pEl=document.getElementById('m-price');
-    if(uEl) uEl.value=sku.unit;
-    if(pEl) pEl.value=sku.unitPrice;
+    const u=document.getElementById('m-unit');const p=document.getElementById('m-price');
+    if(u)u.value=sku.unit;if(p)p.value=sku.unitPrice;
   }
 }
 
-function submitAddPO(){
+async function submitAddPO(){
   const cust=document.getElementById('m-cust').value.trim();
   const cpo=document.getElementById('m-cpo').value.trim();
   if(!cust||!cpo){alert('Customer and PO# are required.');return;}
+  const btn=document.getElementById('add-po-btn');
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
   const so=document.getElementById('m-so').value.trim();
   const wo=document.getElementById('m-wo').value.trim();
-  const id='PO-'+String(nextPoNum++).padStart(3,'0');
-  pos.push({id,customer:cust,cpo,rcvd:document.getElementById('m-rcvd').value,
-    due:document.getElementById('m-due').value,
-    commitDate:document.getElementById('m-commit').value,
-    so,wo,cin7:!!so,fb:!!wo,
-    inherited:document.getElementById('m-inherited').checked,
-    notes:document.getElementById('m-notes').value.trim(),lines:[]});
-  syncListsFromPos([pos[pos.length-1]]);
-  expanded[id]=true;
-  saveData();closeModal();renderContent();
+  const nums=pos.filter(p=>p.id.startsWith('PO-')).map(p=>parseInt(p.id.replace('PO-',''))||0);
+  const id='PO-'+String((Math.max(0,...nums)+1)).padStart(3,'0');
+  const newPO={id,customer:cust,cpo,rcvd:document.getElementById('m-rcvd').value,
+    due:document.getElementById('m-due').value,commitDate:document.getElementById('m-commit').value,
+    so,wo,cin7:!!so,fb:!!wo,inherited:document.getElementById('m-inherited').checked,
+    notes:document.getElementById('m-notes').value.trim(),lines:[]};
+  try{
+    await dbSavePO(newPO);pos.push(newPO);
+    await syncListsFromPos([newPO]);
+    closeModal();renderContent();
+  }catch(e){alert('Error: '+e.message);if(btn){btn.disabled=false;btn.textContent='Add PO';}}
 }
 
-function submitAddLine(){
+async function submitAddLine(){
   const po=pos.find(p=>p.id===_addPoId);if(!po)return;
   const desc=document.getElementById('m-desc').value.trim();
   if(!desc){alert('Description is required.');return;}
   const unit=document.getElementById('m-unit').value||'ea';
   const unitPrice=parseFloat(document.getElementById('m-price').value)||0;
   const ids=po.lines.map(l=>parseInt(l.id.replace('L',''))||0);
-  po.lines.push({id:'L'+(Math.max(0,...ids,0)+1),desc,
-    qty:parseInt(document.getElementById('m-qty').value)||1,
-    unit,unitPrice,shipped:[]});
-  // Save to SKU library via sync (always) — checkbox controls whether to update existing price
-  if(document.getElementById('m-savesku')?.checked){
-    syncListsFromPos([{customer:po.customer,lines:[{desc,unit,unitPrice}]}]);
-  }
-  saveData();closeModal();renderContent();
+  const line={id:'L'+(Math.max(0,...ids,0)+1),desc,qty:parseInt(document.getElementById('m-qty').value)||1,unit,unitPrice,shipped:[]};
+  try{
+    await dbSaveLine(po.id,line,po.lines.length);
+    po.lines.push(line);
+    if(document.getElementById('m-savesku')?.checked) await syncListsFromPos([{customer:po.customer,lines:[line]}]);
+    closeModal();renderContent();
+  }catch(e){alert('Error: '+e.message);}
 }
-function submitShipment(){
+
+async function submitShipment(){
   const po=pos.find(p=>p.id===_addPoId);
   const l=po&&po.lines.find(x=>x.id===_addLineId);if(!l)return;
   const qty=parseInt(document.getElementById('m-sqty').value)||0;
   const open=lineOpenQty(l);
-  if(qty<=0||qty>open){alert(`Qty must be between 1 and ${open}.`);return;}
-  l.shipped.push({date:document.getElementById('m-date').value,qty,
-    inv:document.getElementById('m-inv').value.trim()});
-  saveData();closeModal();renderContent();
+  if(qty<=0||qty>open){alert(`Qty must be 1–${open}.`);return;}
+  const sh={date:document.getElementById('m-date').value,qty,inv:document.getElementById('m-inv').value.trim()};
+  try{
+    await dbSaveShipment(_addPoId,_addLineId,sh);
+    l.shipped.push(sh);closeModal();renderContent();
+  }catch(e){alert('Error: '+e.message);}
 }
 
-// ── Sync customer & SKU lists from PO data ─────────────────────
-// Called any time POs are added — merges in new customers and SKUs
-// without overwriting existing entries or their edited values
-function syncListsFromPos(newPosList){
-  let custChanged=false, skuChanged=false;
-  newPosList.forEach(po=>{
-    // Customer
-    if(po.customer&&!customers.find(c=>c.name===po.customer)){
-      customers.push({name:po.customer});
-      custChanged=true;
-    }
-    // SKUs from each line
-    po.lines.forEach(l=>{
-      if(!l.desc) return;
-      const existing=skus.find(s=>s.desc===l.desc);
-      if(!existing){
-        skus.push({desc:l.desc,unit:l.unit||'ea',unitPrice:l.unitPrice||0});
-        skuChanged=true;
-      }
-      // If price was 0 and now we have a real price, update it
-      else if(existing.unitPrice===0&&l.unitPrice>0){
-        existing.unitPrice=l.unitPrice;
-        skuChanged=true;
-      }
-    });
-  });
-  if(custChanged){customers.sort((a,b)=>a.name.localeCompare(b.name));saveCustomers();}
-  if(skuChanged) saveSkus();
-}
-
-// ── Export / Import ────────────────────────────────────────────
+// ── CSV import/export ──────────────────────────────────────────
 function exportCSV(){
-  const rows=[['PO ID','Customer','Customer PO#','Date Received','Due Date','Cin7 SO#','FB WO#','Notes','Line ID','Description','Ordered Qty','Unit','Unit Price','Line Value','Shipped Qty','Shipped Value','Open Qty','Open Value','Invoice#s','Line Status']];
+  const rows=[['PO ID','Customer','Customer PO#','Date Received','Due Date','Committed Date','Cin7 SO#','FB WO#','Inherited','Notes','Line ID','Description','Ordered Qty','Unit','Unit Price','Line Value','Shipped Qty','Shipped Value','Open Qty','Open Value','Invoice#s','Line Status']];
   pos.forEach(po=>po.lines.forEach(l=>{
     const shQ=lineShippedQty(l),openQ=lineOpenQty(l);
-    const invNums=[...new Set(l.shipped.filter(s=>s.inv).map(s=>s.inv))].join('; ');
-    rows.push([po.id,`"${po.customer}"`,po.cpo,po.rcvd,po.due,po.so,po.wo,`"${po.notes||''}"`,l.id,`"${l.desc}"`,l.qty,l.unit,l.unitPrice,lineValue(l),shQ,lineShippedVal(l),openQ,openQ*l.unitPrice,invNums,lineStatus(l)]);
+    const invs=[...new Set(l.shipped.filter(s=>s.inv).map(s=>s.inv))].join('; ');
+    rows.push([po.id,`"${po.customer}"`,po.cpo,po.rcvd,po.due,po.commitDate,po.so,po.wo,po.inherited?'Y':'N',`"${po.notes||''}"`,l.id,`"${l.desc}"`,l.qty,l.unit,l.unitPrice,lineValue(l),shQ,lineShippedVal(l),openQ,openQ*l.unitPrice,invs,lineStatus(l)]);
   }));
   dl(rows.map(r=>r.join(',')).join('\n'),'pipeline_'+today()+'.csv','text/csv');
 }
-function exportJSON(){
-  dl(JSON.stringify({pos,settings,customers,skus,exported:new Date().toISOString()},null,2),'scp_backup_'+today()+'.json','application/json');
-}
-function importJSON(e){
+
+async function importCSV(e){
   const file=e.target.files[0];if(!file)return;
   const r=new FileReader();
-  r.onload=ev=>{
-    try{
-      const d=JSON.parse(ev.target.result);
-      if(d.pos&&Array.isArray(d.pos)){
-        pos=d.pos;
-        if(d.settings) settings={...DEFAULT_SETTINGS,...d.settings};
-        if(d.customers) customers=d.customers;
-        if(d.skus) skus=d.skus;
-        syncListsFromPos(pos);
-        saveData();saveSettings();saveCustomers();saveSkus();
-        alert(`Restored ${pos.length} POs successfully.`);
-        renderContent();
-      }else{alert('Invalid backup file.');}
-    }catch{alert('Could not read backup file.');}
-  };
-  r.readAsText(file);
-  e.target.value='';
-}
-function importCSV(e){
-  const file=e.target.files[0];if(!file)return;
-  const r=new FileReader();
-  r.onload=ev=>{
+  r.onload=async ev=>{
     try{
       const lines=ev.target.result.split('\n').filter(l=>l.trim());
       const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
       const idx=h=>headers.indexOf(h);
-      // Parse rows into PO map
       const poMap={};
       for(let i=1;i<lines.length;i++){
-        const cols=parseCSVLine(lines[i]);
-        if(cols.length<14)continue;
-        const poId=cols[idx('po_id')]?.trim();
-        if(!poId)continue;
+        const cols=parseCSVLine(lines[i]);if(cols.length<14)continue;
+        const poId=cols[idx('po_id')]?.trim();if(!poId)continue;
         if(!poMap[poId]){
-          poMap[poId]={
-            id:poId,
-            customer:cols[idx('customer')]?.trim()||'',
-            cpo:cols[idx('cpo')]?.trim()||poId,
-            rcvd:cols[idx('rcvd')]?.trim()||'',
-            due:cols[idx('due')]?.trim()||'',
-            commitDate:cols[idx('commitDate')]?.trim()||'',
-            so:cols[idx('so')]?.trim()||'',
-            wo:cols[idx('wo')]?.trim()||'',
-            cin7:cols[idx('cin7')]?.trim()==='Y',
-            fb:cols[idx('fb')]?.trim()==='Y',
+          poMap[poId]={id:poId,customer:cols[idx('customer')]?.trim()||'',
+            cpo:cols[idx('cpo')]?.trim()||poId,rcvd:cols[idx('rcvd')]?.trim()||'',
+            due:cols[idx('due')]?.trim()||'',commitDate:cols[idx('commitDate')]?.trim()||'',
+            so:cols[idx('so')]?.trim()||'',wo:cols[idx('wo')]?.trim()||'',
+            cin7:cols[idx('cin7')]?.trim()==='Y',fb:cols[idx('fb')]?.trim()==='Y',
             inherited:cols[idx('inherited')]?.trim()==='Y',
-            notes:cols[idx('notes')]?.trim()||'',
-            lines:[]
-          };
+            notes:cols[idx('notes')]?.trim()||'',lines:[]};
         }
         const lineId=cols[idx('line_id')]?.trim();
         const lineDesc=cols[idx('line_desc')]?.trim();
         if(lineId&&lineDesc){
+          const shQ=parseInt(cols[idx('shipped_qty')])||0;
           const invStr=cols[idx('invoices')]?.trim()||'';
-          const shippedQty=parseInt(cols[idx('shipped_qty')])||0;
-          const shipped=shippedQty>0?[{date:'',qty:shippedQty,inv:invStr}]:[];
-          poMap[poId].lines.push({
-            id:lineId,
-            desc:lineDesc,
-            qty:parseInt(cols[idx('qty')])||0,
-            unit:cols[idx('unit')]?.trim()||'ea',
+          poMap[poId].lines.push({id:lineId,desc:lineDesc,
+            qty:parseInt(cols[idx('qty')])||0,unit:cols[idx('unit')]?.trim()||'ea',
             unitPrice:parseFloat(cols[idx('unit_price')])||0,
-            shipped
-          });
+            shipped:shQ>0?[{date:'',qty:shQ,inv:invStr}]:[]});
         }
       }
       const newPos=Object.values(poMap);
-      if(!newPos.length){alert('No valid POs found in CSV.');return;}
-      // Merge: skip any PO ids already in pos
+      if(!newPos.length){alert('No valid POs found.');return;}
       const existingIds=new Set(pos.map(p=>p.id));
       const toAdd=newPos.filter(p=>!existingIds.has(p.id));
       const dupes=newPos.filter(p=>existingIds.has(p.id));
-      if(!toAdd.length){
-        alert(`All ${newPos.length} PO(s) in this CSV already exist in your pipeline. Nothing was added.`);
-        return;
+      if(!toAdd.length){alert(`All ${newPos.length} PO(s) already exist.`);return;}
+      setStatus('loading','Importing...');
+      for(const po of toAdd){
+        await dbSavePO(po);
+        for(let i=0;i<po.lines.length;i++){
+          await dbSaveLine(po.id,po.lines[i],i);
+          for(const sh of po.lines[i].shipped){if(sh.qty>0)await dbSaveShipment(po.id,po.lines[i].id,sh);}
+        }
       }
       pos=[...pos,...toAdd];
-      syncListsFromPos(toAdd);
-      saveData();
-      const msg=dupes.length
-        ?`Added ${toAdd.length} PO(s). Skipped ${dupes.length} duplicate(s): ${dupes.map(p=>p.cpo).join(', ')}.`
-        :`Successfully imported ${toAdd.length} PO(s).`;
-      alert(msg);
-      renderContent();
-    }catch(err){
-      alert('Error parsing CSV: '+err.message);
-      console.error(err);
-    }
+      await syncListsFromPos(toAdd);
+      setStatus('ok','● Live');
+      const msg=dupes.length?`Added ${toAdd.length} PO(s). Skipped ${dupes.length} duplicate(s): ${dupes.map(p=>p.cpo).join(', ')}.`:`Imported ${toAdd.length} PO(s) successfully.`;
+      alert(msg);renderContent();
+    }catch(err){setStatus('err','✕ Error');alert('Import error: '+err.message);console.error(err);}
   };
-  r.readAsText(file);
-  e.target.value='';
+  r.readAsText(file);e.target.value='';
 }
 
 function parseCSVLine(line){
-  const result=[];
-  let cur='',inQ=false;
+  const result=[];let cur='',inQ=false;
   for(let i=0;i<line.length;i++){
     const c=line[i];
-    if(c==='"'){
-      if(inQ&&line[i+1]==='"'){cur+='"';i++;}
-      else inQ=!inQ;
-    } else if(c===','&&!inQ){
-      result.push(cur);cur='';
-    } else {
-      cur+=c;
-    }
+    if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+    else if(c===','&&!inQ){result.push(cur);cur='';}
+    else cur+=c;
   }
-  result.push(cur);
-  return result;
+  result.push(cur);return result;
 }
 
-function clearAll(){
-  if(!confirm('Delete ALL pipeline data? This cannot be undone.'))return;
-  if(!confirm('Are you sure? All POs and shipment history will be lost.'))return;
-  pos=[];saveData();expanded={};renderContent();
+// ── One-time migration from localStorage ──────────────────────
+async function migrateFromLocalStorage(){
+  const raw=localStorage.getItem('scp_pipeline_v1');
+  if(!raw){alert('No local data found.');return;}
+  let localPos;try{localPos=JSON.parse(raw);}catch{alert('Could not read local data.');return;}
+  if(!localPos.length){alert('No POs found in local storage.');return;}
+  if(!confirm(`Found ${localPos.length} POs in local storage. Migrate to database?`))return;
+  const btn=document.getElementById('migrate-btn');
+  const msg=document.getElementById('migrate-msg');
+  if(btn)btn.disabled=true;
+  const existingIds=new Set(pos.map(p=>p.id));
+  const toMigrate=localPos.filter(p=>!existingIds.has(p.id));
+  if(!toMigrate.length){if(msg)msg.textContent='All POs already exist in the database.';if(btn)btn.disabled=false;return;}
+  let done=0,errs=0;
+  for(const po of toMigrate){
+    try{
+      if(msg)msg.textContent=`Migrating ${done+1}/${toMigrate.length}...`;
+      const cleanPO={...po,commitDate:po.commitDate||''};
+      await dbSavePO(cleanPO);
+      for(let i=0;i<(po.lines||[]).length;i++){
+        const l=po.lines[i];
+        await dbSaveLine(po.id,l,i);
+        for(const sh of(l.shipped||[])){if(sh.qty>0)await dbSaveShipment(po.id,l.id,sh);}
+      }
+      pos.push({...cleanPO,lines:(po.lines||[]).map(l=>({...l,shipped:(l.shipped||[]).map(s=>({...s}))}))});
+      done++;
+    }catch(e){errs++;console.error('Migrate error',po.id,e);}
+  }
+  await syncListsFromPos(toMigrate);
+  if(btn)btn.disabled=false;
+  if(msg)msg.textContent=`Done — migrated ${done} POs${errs?`, ${errs} failed`:''}. `;
+  renderContent();
 }
+
 function dl(content,filename,type){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([content],{type}));
@@ -1228,10 +953,9 @@ function dl(content,filename,type){
 }
 function today(){return new Date().toISOString().slice(0,10);}
 
-// ── Init ───────────────────────────────────────────────────────
-loadData();
+// ── Boot ───────────────────────────────────────────────────────
 document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-renderContent();
+dbLoad();
 </script>
 </body>
 </html>
