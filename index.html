@@ -58,6 +58,27 @@ select:focus{border-color:var(--accent);}
 .btn-ghost{background:transparent;border:none;color:var(--accent);font-size:12px;padding:0;cursor:pointer;font-family:var(--sans);}
 .section-divider{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:8px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
 .divider-badge{background:var(--red-dim);color:var(--red);border-radius:4px;padding:1px 6px;font-size:10px;}
+.labor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+.labor-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px;}
+.labor-table-title{font-size:12px;font-weight:600;color:var(--text2);padding:12px 14px 0;}
+.labor-table-sub{font-size:11px;color:var(--text3);padding:2px 14px 8px;border-bottom:1px solid var(--border);}
+.lt-header{display:grid;padding:8px 14px;background:var(--surface2);font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;}
+.lt-row{display:grid;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--mono);align-items:center;}
+.lt-row:last-child{border-bottom:none;}
+.lt-row.total-row{background:var(--surface2);font-weight:500;}
+.lt-row.warn{background:var(--amber-dim);}
+.lt-row.over{background:var(--red-dim);}
+.lt-val{text-align:right;}
+.lt-val.green{color:var(--green);}
+.lt-val.amber{color:var(--amber);}
+.lt-val.red{color:var(--red);}
+.eff-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;min-width:60px;display:inline-block;vertical-align:middle;}
+.eff-fill{height:100%;border-radius:3px;}
+.log-grid{display:grid;gap:8px;}
+.log-row{display:grid;grid-template-columns:1fr 1fr 100px 100px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);}
+.log-row:last-child{border-bottom:none;}
+.month-picker{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-family:var(--mono);font-size:12px;outline:none;width:100%;}
+.month-picker:focus{border-color:var(--accent);}
 .po-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
 .po-card.overdue{border-color:var(--red);border-left:3px solid var(--red);}
 .po-header{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.6fr) 100px 100px 100px 100px 110px 100px;gap:8px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
@@ -159,6 +180,7 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-section">Views</div>
       <div class="sidebar-item active" onclick="setTab('pipeline',this)"><div class="dot"></div>Pipeline</div>
       <div class="sidebar-item" onclick="setTab('projections',this)"><div class="dot"></div>Projections</div>
+      <div class="sidebar-item" onclick="setTab('labor',this)"><div class="dot"></div>Labor</div>
       <div class="sidebar-section">Tools</div>
       <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export CSV</div>
       <div class="sidebar-item" onclick="document.getElementById('import-csv-file').click()"><div class="dot"></div>Import POs from CSV</div>
@@ -180,7 +202,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── App state ──────────────────────────────────────────────────
-let pos=[],customers=[],skus=[];
+let pos=[],customers=[],skus=[],employees=[],laborLogs=[];
 let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
 let expanded={},currentTab='pipeline';
 let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
@@ -196,13 +218,15 @@ function setStatus(state,text){
 async function dbLoad(){
   setStatus('loading','Loading...');
   try{
-    const [posRes,lineRes,shipRes,custRes,skuRes,setRes]=await Promise.all([
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes]=await Promise.all([
       sb.from('pos').select('*').order('created_at'),
       sb.from('line_items').select('*').order('sort_order'),
       sb.from('shipments').select('*').order('created_at'),
       sb.from('customers').select('*').order('name'),
       sb.from('skus').select('*').order('description'),
       sb.from('settings').select('*').eq('id',1).single(),
+      sb.from('employees').select('*').order('name'),
+      sb.from('labor_logs').select('*').order('month'),
     ]);
     if(posRes.error) throw posRes.error;
 
@@ -234,7 +258,9 @@ async function dbLoad(){
     }));
 
     customers=(custRes.data||[]).map(c=>({name:c.name}));
-    skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price)}));
+    skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price),laborHours:Number(s.labor_hours||0)}));
+    employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false}));
+    laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
     if(setRes.data){
       const d=setRes.data;
       settings={companyName:d.company_name,divisionName:d.division_name,preparedBy:d.prepared_by,monthlyTarget:Number(d.monthly_target),laborCapacity:Number(d.labor_capacity)};
@@ -283,8 +309,17 @@ async function dbDeleteLine(poId,lineId){const {error}=await sb.from('line_items
 async function dbDeletePO(id){const {error}=await sb.from('pos').delete().eq('id',id);if(error)throw error;}
 async function dbSaveCustomer(name){const {error}=await sb.from('customers').upsert({name},{onConflict:'name'});if(error)throw error;}
 async function dbDeleteCustomer(name){const {error}=await sb.from('customers').delete().eq('name',name);if(error)throw error;}
-async function dbSaveSku(sku){const {error}=await sb.from('skus').upsert({description:sku.desc,unit:sku.unit,unit_price:sku.unitPrice},{onConflict:'description'});if(error)throw error;}
+async function dbSaveSku(sku){const {error}=await sb.from('skus').upsert({description:sku.desc,unit:sku.unit,unit_price:sku.unitPrice,labor_hours:sku.laborHours||0},{onConflict:'description'});if(error)throw error;}
 async function dbDeleteSku(desc){const {error}=await sb.from('skus').delete().eq('description',desc);if(error)throw error;}
+async function dbSaveEmployee(emp){
+  const {data,error}=await sb.from('employees').upsert({id:emp.id||undefined,name:emp.name,role:emp.role||'',active:emp.active!==false},{onConflict:'name'}).select().single();
+  if(error)throw error;return data;
+}
+async function dbDeleteEmployee(id){const {error}=await sb.from('employees').delete().eq('id',id);if(error)throw error;}
+async function dbSaveLog(log){
+  const {data,error}=await sb.from('labor_logs').upsert({id:log.id||undefined,employee_id:log.employeeId,month:log.month,hours:log.hours,notes:log.notes||''},{onConflict:'employee_id,month'}).select().single();
+  if(error)throw error;return data;
+}
 async function dbSaveSettings(){
   const {error}=await sb.from('settings').update({company_name:settings.companyName,division_name:settings.divisionName,prepared_by:settings.preparedBy,monthly_target:settings.monthlyTarget,labor_capacity:settings.laborCapacity}).eq('id',1);
   if(error)throw error;
@@ -300,7 +335,7 @@ async function syncListsFromPos(newPosList){
     for(const l of(po.lines||[])){
       if(!l.desc)continue;
       if(!skus.find(s=>s.desc===l.desc)){
-        const sku={desc:l.desc,unit:l.unit||'ea',unitPrice:l.unitPrice||0};
+        const sku={desc:l.desc,unit:l.unit||'ea',unitPrice:l.unitPrice||0,laborHours:l.laborHours||0};
         await dbSaveSku(sku);
         skus.push(sku);
       }
@@ -353,6 +388,7 @@ function setTab(tab,el){
 function renderContent(){
   if(currentTab==='pipeline')renderPipeline();
   else if(currentTab==='projections')renderProjections();
+  else if(currentTab==='labor')renderLabor();
   else if(currentTab==='lists')renderLists();
   else if(currentTab==='settings')renderSettings();
 }
@@ -551,6 +587,229 @@ function renderProjections(){
     </div>`;
 }
 
+// ── Labor dashboard ────────────────────────────────────────────
+function skuLaborHours(desc){
+  const s=skus.find(x=>x.desc===desc);
+  return s?s.laborHours:0;
+}
+
+function renderLabor(){
+  // ── Projected hours: open line items × BOM hours, bucketed by PO due month
+  const projMap={};
+  pos.forEach(po=>{
+    if(!po.due)return;
+    const d=new Date(po.due);
+    const mk=d.toISOString().slice(0,7); // YYYY-MM
+    const label=d.toLocaleString('default',{month:'short',year:'numeric'});
+    if(!projMap[mk])projMap[mk]={mk,label,projHrs:0,d};
+    po.lines.forEach(l=>{
+      const openQty=lineOpenQty(l);
+      projMap[mk].projHrs+=openQty*skuLaborHours(l.desc);
+    });
+  });
+
+  // ── Billable hours: shipped qty × BOM hours, bucketed by actual ship date
+  const billMap={};
+  pos.forEach(po=>{
+    po.lines.forEach(l=>{
+      l.shipped.forEach(sh=>{
+        if(!sh.date)return;
+        const d=new Date(sh.date);
+        const mk=d.toISOString().slice(0,7);
+        const label=d.toLocaleString('default',{month:'short',year:'numeric'});
+        if(!billMap[mk])billMap[mk]={mk,label,billHrs:0,d};
+        billMap[mk].billHrs+=sh.qty*skuLaborHours(l.desc);
+      });
+    });
+  });
+
+  // ── Actual hours: sum labor_logs by month
+  const actualMap={};
+  laborLogs.forEach(log=>{
+    if(!actualMap[log.month])actualMap[log.month]={totalHrs:0};
+    actualMap[log.month].totalHrs+=log.hours;
+  });
+
+  // ── Merge all months for efficiency table
+  const allMonths=new Set([...Object.keys(projMap),...Object.keys(billMap),...Object.keys(actualMap)]);
+  const effRows=[...allMonths].sort().map(mk=>{
+    const proj=projMap[mk]||{projHrs:0,label:mk};
+    const bill=billMap[mk]||{billHrs:0,label:mk};
+    const label=proj.label||bill.label||mk;
+    const billHrs=bill.billHrs;
+    const actualHrs=actualMap[mk]?.totalHrs||0;
+    const eff=actualHrs>0?Math.round(billHrs/actualHrs*100):null;
+    return{mk,label,projHrs:proj.projHrs,billHrs,actualHrs,eff};
+  });
+
+  // ── Summary metrics
+  const totalProjHrs=Object.values(projMap).reduce((s,m)=>s+m.projHrs,0);
+  const totalBillHrs=Object.values(billMap).reduce((s,m)=>s+m.billHrs,0);
+  const totalActualHrs=laborLogs.reduce((s,l)=>s+l.hours,0);
+  const overallEff=totalActualHrs>0?Math.round(totalBillHrs/totalActualHrs*100):null;
+  const capacity=settings.laborCapacity||0;
+
+  // ── Projected months sorted
+  const projMonths=Object.values(projMap).sort((a,b)=>a.d-b.d);
+
+  // ── Employee log section for current/recent months
+  const now=new Date();
+  const currentMonth=now.toISOString().slice(0,7);
+  const prevMonth=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString().slice(0,7);
+  const logMonths=[prevMonth,currentMonth];
+
+  const effColor=e=>e===null?'var(--text3)':e>=85?'var(--green)':e>=65?'var(--amber)':'var(--red)';
+  const effClass=e=>e===null?'':e>=85?'green':e>=65?'amber':'red';
+
+  const effRowsHtml=effRows.map((r,i)=>{
+    const barPct=r.eff!==null?Math.min(r.eff,150):0;
+    const barColor=effColor(r.eff);
+    const rowClass=r.eff!==null&&r.eff<65?' over':r.eff!==null&&r.eff<85?' warn':'';
+    return`<div class="lt-row${rowClass}" style="grid-template-columns:1fr 80px 80px 80px 80px 100px;">
+      <span>${r.label}</span>
+      <span class="lt-val">${r.projHrs>0?r.projHrs.toFixed(1)+'h':'—'}</span>
+      <span class="lt-val${r.billHrs>0?' amber':''}">${r.billHrs>0?r.billHrs.toFixed(1)+'h':'—'}</span>
+      <span class="lt-val">${r.actualHrs>0?r.actualHrs.toFixed(1)+'h':'—'}</span>
+      <span class="lt-val ${effClass(r.eff)}">${r.eff!==null?r.eff+'%':'—'}</span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        <span class="eff-bar" style="flex:1;"><span class="eff-fill" style="width:${Math.min(barPct,100)}%;background:${barColor};display:block;height:100%;"></span></span>
+      </span>
+    </div>`;
+  }).join('')||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No labor data yet — add BOM hours to SKUs and log actual hours below</div>';
+
+  const projRowsHtml=projMonths.map((r,i)=>{
+    const pct=capacity>0?Math.round(r.projHrs/capacity*100):null;
+    const cls=pct!==null&&pct>100?' over':pct!==null&&pct>85?' warn':'';
+    return`<div class="lt-row${cls}" style="grid-template-columns:1.2fr 80px 80px 100px;">
+      <span>${r.label}</span>
+      <span class="lt-val">${r.projHrs.toFixed(1)}h</span>
+      <span class="lt-val">${capacity>0?capacity+'h':'—'}</span>
+      <span class="lt-val ${pct!==null&&pct>100?'red':pct!==null&&pct>85?'amber':'green'}">${pct!==null?pct+'%':'—'}</span>
+    </div>`;
+  }).join('')||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No open orders with BOM hours set</div>';
+
+  // ── Employee log HTML
+  const empLogHtml=employees.filter(e=>e.active).map(emp=>{
+    return logMonths.map(mk=>{
+      const log=laborLogs.find(l=>l.employeeId===emp.id&&l.month===mk);
+      const d=new Date(mk+'-15');
+      const label=d.toLocaleString('default',{month:'short',year:'numeric'});
+      return`<div class="log-row">
+        <span style="font-size:12px;">${emp.name}</span>
+        <span style="font-size:11px;color:var(--text3);">${emp.role}</span>
+        <span style="font-size:12px;color:var(--text3);">${label}</span>
+        <input class="month-picker" type="number" min="0" step="0.5" placeholder="hrs"
+          value="${log?log.hours:''}"
+          onchange="saveLogEntry('${emp.id}','${mk}',this.value,'${log?log.id:''}')"
+          style="width:80px;"/>
+        <span style="font-size:11px;color:var(--text3);">${log&&log.notes?log.notes:''}</span>
+      </div>`;
+    }).join('');
+  }).join('')||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">No active employees — add them below</div>';
+
+  document.getElementById('content').innerHTML=`
+    <div class="labor-grid">
+      <div class="metric"><div class="metric-label">Total projected hrs (open)</div><div class="metric-value">${totalProjHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">From open orders × BOM</div></div>
+      <div class="metric"><div class="metric-label">Billable hrs (shipped)</div><div class="metric-value amber">${totalBillHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">Shipped qty × BOM hours</div></div>
+      <div class="metric"><div class="metric-label">Actual hrs logged</div><div class="metric-value">${totalActualHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">From employee logs</div></div>
+      <div class="metric"><div class="metric-label">Overall efficiency</div><div class="metric-value ${effClass(overallEff)}">${overallEff!==null?overallEff+'%':'—'}</div><div class="metric-sub">Billable ÷ actual</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="labor-table">
+        <div class="labor-table-title">Projected hours by month</div>
+        <div class="labor-table-sub">Open orders × BOM hours &nbsp;·&nbsp; capacity: ${capacity>0?capacity+'h/mo':'not set in Settings'}</div>
+        <div class="lt-header" style="grid-template-columns:1.2fr 80px 80px 100px;"><span>Month</span><span class="lt-val">Proj hrs</span><span class="lt-val">Capacity</span><span class="lt-val">% of cap</span></div>
+        ${projRowsHtml}
+      </div>
+      <div class="labor-table">
+        <div class="labor-table-title">Efficiency by month</div>
+        <div class="labor-table-sub">Billable (shipped×BOM) vs actual logged &nbsp;·&nbsp; <span style="color:var(--green);">≥85% good</span> &nbsp;<span style="color:var(--amber);">65–84% watch</span> &nbsp;<span style="color:var(--red);">&lt;65% review</span></div>
+        <div class="lt-header" style="grid-template-columns:1fr 80px 80px 80px 80px 100px;"><span>Month</span><span class="lt-val">Proj</span><span class="lt-val">Billable</span><span class="lt-val">Actual</span><span class="lt-val">Eff %</span><span></span></div>
+        ${effRowsHtml}
+      </div>
+    </div>
+
+    <div class="labor-table">
+      <div class="labor-table-title">Log actual hours</div>
+      <div class="labor-table-sub">Enter hours worked per employee for previous and current month</div>
+      <div class="log-row" style="border-bottom:0.5px solid var(--border2);">
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Employee</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Role</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Month</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Hours</span>
+        <span></span>
+      </div>
+      <div style="padding:0 14px;">
+        ${empLogHtml}
+      </div>
+      <div style="padding:12px 14px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Add employee</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+          <div><div class="field-label" style="margin-bottom:4px;">Name</div><input id="new-emp-name" class="field-input" type="text" placeholder="Employee name"/></div>
+          <div><div class="field-label" style="margin-bottom:4px;">Role</div><input id="new-emp-role" class="field-input" type="text" placeholder="e.g. Production tech"/></div>
+          <button class="btn btn-primary" onclick="addEmployee()">+ Add</button>
+        </div>
+      </div>
+    </div>
+
+    ${employees.length>0?`<div class="labor-table">
+      <div class="labor-table-title">Team</div>
+      <div class="labor-table-sub">Toggle active/inactive — inactive employees are hidden from logging</div>
+      ${employees.map(e=>`<div class="lt-row" style="grid-template-columns:1fr 1fr auto auto;">
+        <span>${e.name}</span>
+        <span style="color:var(--text3);">${e.role}</span>
+        <span class="badge ${e.active?'complete':'invoiced'}">${e.active?'active':'inactive'}</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-xs" onclick="toggleEmployee('${e.id}',${!e.active})">${e.active?'Deactivate':'Activate'}</button>
+          <button class="btn btn-xs btn-danger" onclick="removeEmployee('${e.id}')">Remove</button>
+        </div>
+      </div>`).join('')}
+    </div>`:''}`;
+}
+
+async function saveLogEntry(empId,month,hoursVal,existingId){
+  const hours=parseFloat(hoursVal)||0;
+  const log={id:existingId||undefined,employeeId:empId,month,hours,notes:''};
+  try{
+    const saved=await dbSaveLog(log);
+    const existing=laborLogs.findIndex(l=>l.employeeId===empId&&l.month===month);
+    if(existing>=0) laborLogs[existing]={...log,id:saved.id};
+    else laborLogs.push({...log,id:saved.id});
+  }catch(e){console.error('Log save error',e);}
+}
+
+async function addEmployee(){
+  const name=document.getElementById('new-emp-name')?.value.trim();
+  const role=document.getElementById('new-emp-role')?.value.trim()||'';
+  if(!name){alert('Enter a name.');return;}
+  if(employees.find(e=>e.name===name)){alert('Employee already exists.');return;}
+  try{
+    const emp={name,role,active:true};
+    const saved=await dbSaveEmployee(emp);
+    employees.push({id:saved.id,name,role,active:true});
+    employees.sort((a,b)=>a.name.localeCompare(b.name));
+    renderLabor();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+async function toggleEmployee(id,active){
+  const emp=employees.find(e=>e.id===id);if(!emp)return;
+  emp.active=active;
+  try{await dbSaveEmployee(emp);renderLabor();}
+  catch(e){alert('Error: '+e.message);}
+}
+
+async function removeEmployee(id){
+  if(!confirm('Remove this employee? Their logged hours will also be deleted.'))return;
+  try{
+    await dbDeleteEmployee(id);
+    employees=employees.filter(e=>e.id!==id);
+    laborLogs=laborLogs.filter(l=>l.employeeId!==id);
+    renderLabor();
+  }catch(e){alert('Error: '+e.message);}
+}
+
 // ── Lists (Customers & SKUs) ───────────────────────────────────
 function renderLists(){
   const cRows=customers.map(c=>`
@@ -561,10 +820,11 @@ function renderLists(){
       <button class="btn btn-danger btn-xs" onclick="deleteCustomer('${c.name.replace(/'/g,"\\'")}')">Remove</button>
     </div>`).join('');
   const sRows=skus.map(s=>`
-    <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
+    <div style="display:grid;grid-template-columns:1fr 70px 110px 90px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
       <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.desc}">${s.desc}</span>
       <input class="settings-input" type="text" value="${s.unit}" style="width:100%;font-size:12px;" onchange="updateSkuUnit('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
       <input class="settings-input" type="number" value="${s.unitPrice}" step="0.01" style="width:100%;font-size:12px;" onchange="updateSkuPrice('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
+      <input class="settings-input" type="number" value="${s.laborHours||0}" step="0.01" min="0" placeholder="hrs" style="width:100%;font-size:12px;" title="Labor hours per unit (from BOM)" onchange="updateSkuLabor('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
       <button class="btn btn-danger btn-xs" onclick="deleteSku('${s.desc.replace(/'/g,"\\'")}')">✕</button>
     </div>`).join('');
   document.getElementById('content').innerHTML=`
@@ -578,17 +838,19 @@ function renderLists(){
     </div>
     <div class="settings-card">
       <h3>SKU library <span style="font-size:12px;font-weight:400;color:var(--text3);">— ${skus.length} saved · autocomplete when adding lines</span></h3>
-      <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border2);">
+      <div style="display:grid;grid-template-columns:1fr 70px 110px 90px auto;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border2);">
         <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Description</span>
         <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Unit</span>
         <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Unit price</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">BOM hrs/unit</span>
         <span></span>
       </div>
       ${sRows||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">No SKUs yet</div>'}
-      <div style="display:grid;grid-template-columns:1fr 80px 120px auto;gap:8px;margin-top:12px;align-items:end;">
+      <div style="display:grid;grid-template-columns:1fr 70px 110px 90px auto;gap:8px;margin-top:12px;align-items:end;">
         <div><div class="field-label" style="margin-bottom:4px;">Description *</div><input id="new-sku-desc" class="settings-input" type="text" placeholder="Part name" style="width:100%;"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Unit</div><input id="new-sku-unit" class="settings-input" type="text" value="ea" style="width:100%;"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Price ($)</div><input id="new-sku-price" class="settings-input" type="number" step="0.01" placeholder="0.00" style="width:100%;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">BOM hrs/unit</div><input id="new-sku-labor" class="settings-input" type="number" step="0.01" min="0" placeholder="0.00" style="width:100%;"/></div>
         <button class="btn btn-primary" style="align-self:end;" onclick="addSku()">+ Add</button>
       </div>
     </div>`;
@@ -626,12 +888,16 @@ async function addSku(){
   const desc=document.getElementById('new-sku-desc')?.value.trim();
   const unit=document.getElementById('new-sku-unit')?.value.trim()||'ea';
   const unitPrice=parseFloat(document.getElementById('new-sku-price')?.value)||0;
+  const laborHours=parseFloat(document.getElementById('new-sku-labor')?.value)||0;
   if(!desc){alert('Enter a description.');return;}
   if(skus.find(s=>s.desc===desc)){alert('Already exists.');return;}
-  await dbSaveSku({desc,unit,unitPrice});skus.push({desc,unit,unitPrice});renderLists();
+  await dbSaveSku({desc,unit,unitPrice,laborHours});
+  skus.push({desc,unit,unitPrice,laborHours});
+  renderLists();
 }
 async function updateSkuPrice(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.unitPrice=parseFloat(val)||0;await dbSaveSku(s);}}
 async function updateSkuUnit(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.unit=val.trim();await dbSaveSku(s);}}
+async function updateSkuLabor(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.laborHours=parseFloat(val)||0;await dbSaveSku(s);}}
 
 // ── Settings ───────────────────────────────────────────────────
 function renderSettings(){
