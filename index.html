@@ -81,7 +81,7 @@ select:focus{border-color:var(--accent);}
 .month-picker:focus{border-color:var(--accent);}
 .po-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
 .po-card.overdue{border-color:var(--red);border-left:3px solid var(--red);}
-.po-header{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.6fr) 100px 100px 100px 100px 110px 100px;gap:8px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
+.po-header{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.6fr) 100px 100px 100px 100px 80px 80px 110px 80px;gap:8px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
 .po-header:hover{background:rgba(255,255,255,.02);}
 .chevron{color:var(--text3);font-size:10px;transition:transform .15s;}
 .chevron.open{transform:rotate(90deg);}
@@ -453,6 +453,9 @@ function renderPipeline(){
     <div id="po-list">${cards}</div>`;
 }
 
+function poTotalHours(po){return po.lines.reduce((s,l)=>s+l.qty*skuLaborHours(l.desc),0);}
+function poOpenHours(po){return po.lines.reduce((s,l)=>s+lineOpenQty(l)*skuLaborHours(l.desc),0);}
+
 function poCard(po){
   const st=poStatus(po),p=poPct(po),isOpen=expanded[po.id],od=isOverdue(po);
   const warn=!po.cin7||!po.fb;
@@ -461,6 +464,10 @@ function poCard(po){
     :`<span class="badge" style="background:rgba(34,201,122,.12);color:#22c97a;margin-left:6px;font-size:9px;">new</span>`;
   const commitInfo=po.commitDate?`&nbsp;·&nbsp; committed: ${po.commitDate}`
     :`&nbsp;·&nbsp; <span style="color:var(--red);font-size:10px;">no commit date</span>`;
+  const totalHrs=poTotalHours(po);
+  const openHrs=poOpenHours(po);
+  const hrsDisplay=totalHrs>0?totalHrs.toFixed(1):'—';
+  const openHrsDisplay=openHrs>0?openHrs.toFixed(1):'—';
   const detail=isOpen?`
     <div class="po-detail">
       <div class="detail-grid">
@@ -491,7 +498,9 @@ function poCard(po){
       <div class="col-val"><div class="col-label">value</div><div class="col-num">${fmt(poValue(po))}</div></div>
       <div class="col-val"><div class="col-label">shipped</div><div class="col-num amber">${fmt(poShipped(po))}</div></div>
       <div class="col-val"><div class="col-label">invoiced</div><div class="col-num green">${fmt(poInvoiced(po))}</div></div>
-      <div class="col-val"><div class="col-label">open</div><div class="col-num">${fmt(poOpen(po))}</div></div>
+      <div class="col-val"><div class="col-label">open $</div><div class="col-num">${fmt(poOpen(po))}</div></div>
+      <div class="col-val"><div class="col-label">total hrs</div><div class="col-num" style="font-size:12px;">${hrsDisplay}</div></div>
+      <div class="col-val"><div class="col-label">open hrs</div><div class="col-num amber" style="font-size:12px;">${openHrsDisplay}</div></div>
       <span class="badge ${st}">${st}</span><div></div>
     </div>${detail}</div>`;
 }
@@ -819,13 +828,13 @@ function renderLists(){
       <span style="font-size:11px;color:var(--text3);margin:0 8px;">${pos.filter(p=>p.customer===c.name).length} POs</span>
       <button class="btn btn-danger btn-xs" onclick="deleteCustomer('${c.name.replace(/'/g,"\\'")}')">Remove</button>
     </div>`).join('');
-  const sRows=skus.map(s=>`
+  const sRows=skus.map((s,i)=>`
     <div style="display:grid;grid-template-columns:1fr 70px 110px 90px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
       <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.desc}">${s.desc}</span>
-      <input class="settings-input" type="text" value="${s.unit}" style="width:100%;font-size:12px;" onchange="updateSkuUnit('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
-      <input class="settings-input" type="number" value="${s.unitPrice}" step="0.01" style="width:100%;font-size:12px;" onchange="updateSkuPrice('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
-      <input class="settings-input" type="number" value="${s.laborHours||0}" step="0.01" min="0" placeholder="hrs" style="width:100%;font-size:12px;" title="Labor hours per unit (from BOM)" onchange="updateSkuLabor('${s.desc.replace(/'/g,"\\'")}',this.value)"/>
-      <button class="btn btn-danger btn-xs" onclick="deleteSku('${s.desc.replace(/'/g,"\\'")}')">✕</button>
+      <input class="settings-input" type="text" value="${s.unit}" style="width:100%;font-size:12px;" onchange="updateSkuByIdx(${i},'unit',this.value)"/>
+      <input class="settings-input" type="number" value="${s.unitPrice}" step="0.01" style="width:100%;font-size:12px;" onchange="updateSkuByIdx(${i},'unitPrice',parseFloat(this.value)||0)"/>
+      <input class="settings-input" type="number" value="${s.laborHours||0}" step="0.01" min="0" placeholder="hrs" style="width:100%;font-size:12px;" title="Labor hours per unit (from BOM)" onchange="updateSkuByIdx(${i},'laborHours',parseFloat(this.value)||0)"/>
+      <button class="btn btn-danger btn-xs" onclick="deleteSkuByIdx(${i})">✕</button>
     </div>`).join('');
   document.getElementById('content').innerHTML=`
     <div class="settings-card">
@@ -895,6 +904,18 @@ async function addSku(){
   skus.push({desc,unit,unitPrice,laborHours});
   renderLists();
 }
+async function updateSkuByIdx(i,field,val){
+  const s=skus[i];if(!s)return;
+  s[field]=val;
+  try{await dbSaveSku(s);}
+  catch(e){console.error('SKU save error',e);}
+}
+async function deleteSkuByIdx(i){
+  const s=skus[i];if(!s)return;
+  if(!confirm(`Remove "${s.desc}"?`))return;
+  await dbDeleteSku(s.desc);skus.splice(i,1);renderLists();
+}
+// Keep old name-based versions for syncListsFromPos compatibility
 async function updateSkuPrice(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.unitPrice=parseFloat(val)||0;await dbSaveSku(s);}}
 async function updateSkuUnit(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.unit=val.trim();await dbSaveSku(s);}}
 async function updateSkuLabor(desc,val){const s=skus.find(x=>x.desc===desc);if(s){s.laborHours=parseFloat(val)||0;await dbSaveSku(s);}}
