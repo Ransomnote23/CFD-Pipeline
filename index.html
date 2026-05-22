@@ -510,8 +510,9 @@ function renderContent(){
 function renderPipeline(){
   const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
   const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
-  const invoiced=pos.reduce((s,p)=>s+poInvoiced(p),0);
-  const open=pos.reduce((s,p)=>s+poOpen(p),0);
+  // Use invoices table as source of truth for invoiced amount
+  const invoiced=invoices.reduce((s,i)=>s+i.amount,0);
+  const open=totalVal-invoiced;
   const inherited=pos.filter(p=>p.inherited).length;
   const inheritedOpen=pos.filter(p=>p.inherited&&poStatus(p)!=='invoiced'&&poStatus(p)!=='complete').length;
   const custs=[...new Set(pos.map(p=>p.customer))].sort();
@@ -677,7 +678,8 @@ function renderProjections(){
   const tRev=pos.reduce((s,p)=>s+poValue(p),0);
   const tOpen=pos.reduce((s,p)=>s+poOpen(p),0);
   const tShip=pos.reduce((s,p)=>s+poShipped(p),0);
-  const tInv=pos.reduce((s,p)=>s+poInvoiced(p),0);
+  // Use invoices table as source of truth for invoiced amount
+  const tInv=invoices.reduce((s,i)=>s+i.amount,0);
   const mRows=months.map((m,i)=>`
     <div class="proj-table-row proj-5col" style="${i%2?'':'background:rgba(255,255,255,.02)'}">
       <span>${m.key}</span><span class="proj-val">${m.rev>0?fmt(m.rev):'—'}</span>
@@ -686,7 +688,9 @@ function renderProjections(){
       <span class="proj-val">${m.open>0?fmt(m.open):'—'}</span>
     </div>`).join('');
   const custMap={};
-  pos.forEach(po=>{if(!custMap[po.customer])custMap[po.customer]={rev:0,invoiced:0,open:0};custMap[po.customer].rev+=poValue(po);custMap[po.customer].invoiced+=poInvoiced(po);custMap[po.customer].open+=poOpen(po);});
+  pos.forEach(po=>{if(!custMap[po.customer])custMap[po.customer]={rev:0,invoiced:0,open:0};custMap[po.customer].rev+=poValue(po);custMap[po.customer].open+=poOpen(po);});
+  // Add invoiced amounts from invoices table
+  invoices.forEach(inv=>{if(custMap[inv.customer])custMap[inv.customer].invoiced+=inv.amount;});
   const cRows=Object.entries(custMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d],i)=>`
     <div class="proj-table-row" style="grid-template-columns:2fr 1fr 1fr 1fr;${i%2?'':'background:rgba(255,255,255,.02)'}">
       <span>${c}</span><span class="proj-val">${fmt(d.rev)}</span><span class="proj-val green">${fmt(d.invoiced)}</span><span class="proj-val amber">${fmt(d.open)}</span>
