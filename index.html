@@ -597,6 +597,7 @@ function poCard(po){
         <label class="chk-label"><input type="checkbox" ${po.fb?'checked':''} onchange="saveField('${po.id}','fb',this.checked)"/> In Fishbowl</label>
         <label class="chk-label"><input type="checkbox" ${po.inherited?'checked':''} onchange="saveField('${po.id}','inherited',this.checked)"/> Inherited backlog</label>
         <div style="flex:1;"></div>
+        <button class="btn btn-xs btn-primary" onclick="showFulfillPO('${po.id}')">Fulfill / ship</button>
         <button class="btn btn-xs" onclick="showAddLine('${po.id}')">+ Add line</button>
         <button class="btn btn-xs btn-danger" onclick="removePO('${po.id}')">Delete PO</button>
         <span class="saved-msg" id="flash-${po.id}">✓ saved</span>
@@ -640,7 +641,6 @@ function linesSection(po){
       <div class="line-num amber">${fmt(shV)}</div><div class="line-num">${fmt(openQ*l.unitPrice)}</div>
       <span class="badge ${lst}" style="justify-self:end;">${lst}</span>
       <div class="line-actions">
-        <button class="btn btn-xs" onclick="showAddShipment('${po.id}','${l.id}')">+ Ship</button>
         <button class="btn btn-xs btn-danger" onclick="removeLine('${po.id}','${l.id}')">✕</button>
       </div>
       ${l.shipped.length>0?`<div style="grid-column:1/-1;">${ships}</div>`:''}
@@ -1650,27 +1650,158 @@ function showAddLine(poId){
   </div>`;
 }
 
-function showAddShipment(poId,lId){
-  _addPoId=poId;_addLineId=lId;
+function showFulfillPO(poId){
+  _addPoId=poId;
   const po=pos.find(p=>p.id===poId);
-  const l=po&&po.lines.find(x=>x.id===lId);
-  const openQty=lineOpenQty(l);
-  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
-      <div class="modal-title">Record shipment</div>
-      <div class="modal-note">${l.desc}<br>Open: <strong>${openQty} ${l.unit}</strong> &nbsp;·&nbsp; Unit price: <strong>${fmt(l.unitPrice)}</strong></div>
-      <div class="modal-grid">
-        <div><div class="field-label" style="margin-bottom:4px;">Ship date</div><input id="m-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Qty shipped</div><input id="m-sqty" type="number" min="1" max="${openQty}" value="${openQty}"/></div>
-        <div class="full"><div class="field-label" style="margin-bottom:4px;">Invoice# (optional)</div><input id="m-inv" type="text" placeholder="Leave blank if not yet invoiced"/></div>
+  const openLines=po.lines.filter(l=>lineOpenQty(l)>0);
+  if(!openLines.length){alert('All lines on this PO are fully fulfilled.');return;}
+  const today2=new Date().toISOString().slice(0,10);
+  const lineRows=openLines.map(l=>{
+    const openQ=lineOpenQty(l);
+    const lineVal=openQ*l.unitPrice;
+    return`<div style="display:grid;grid-template-columns:1fr 70px 90px 90px;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
+      <div>
+        <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.desc}">${l.desc}</div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${openQ} open &nbsp;·&nbsp; ${fmt(l.unitPrice)}/ea &nbsp;·&nbsp; max ${fmt(lineVal)}</div>
       </div>
+      <div style="text-align:center;">
+        <div class="field-label" style="margin-bottom:3px;">Ship qty</div>
+        <input class="field-input fulfill-qty" type="number" min="0" max="${openQ}" value="${openQ}"
+          data-line-id="${l.id}" data-unit-price="${l.unitPrice}" data-open="${openQ}"
+          oninput="updateFulfillTotal()" style="text-align:center;width:100%;font-size:13px;"/>
+      </div>
+      <div style="text-align:right;font-family:var(--mono);font-size:12px;">
+        <div class="field-label" style="margin-bottom:3px;">Line total</div>
+        <span id="fulfill-line-val-${l.id}">${fmt(lineVal)}</span>
+      </div>
+      <div style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text3);">
+        ${fmt(l.unitPrice)}/ea
+      </div>
+    </div>`;
+  }).join('');
+
+  const totalOpen=openLines.reduce((s,l)=>s+lineOpenQty(l)*l.unitPrice,0);
+
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-title">Fulfill / Ship — ${po.customer}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">PO: ${po.cpo} &nbsp;·&nbsp; SO: ${po.so||'—'}</div>
+
+      <div style="display:grid;grid-template-columns:1fr 70px 90px 90px;gap:8px;padding:5px 0 5px;border-bottom:1px solid var(--border2);margin-bottom:2px;">
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">Line item</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;text-align:center;">Qty</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;text-align:right;">Total</span>
+        <span></span>
+      </div>
+      <div style="max-height:320px;overflow-y:auto;">${lineRows}</div>
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:13px;color:var(--text2);">Invoice total</div>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:600;" id="fulfill-total">${fmt(totalOpen)}</div>
+      </div>
+
+      <div class="modal-grid" style="margin-top:14px;">
+        <div><div class="field-label" style="margin-bottom:4px;">Ship date</div><input id="m-ship-date" type="date" value="${today2}"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Invoice# <span style="color:var(--text3);font-weight:400;">(leave blank if not yet invoiced)</span></div><input id="m-inv-num" type="text" placeholder="e.g. INV-1234"/></div>
+      </div>
+
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px;">
+        If an invoice number is entered, a single invoice record will be created for the full shipment total.
+      </div>
+
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="submitShipment()">Record shipment</button>
+        <button class="btn btn-primary" id="fulfill-btn" onclick="submitFulfillPO()">Record shipment</button>
       </div>
     </div>
   </div>`;
 }
+
+function updateFulfillTotal(){
+  let total=0;
+  document.querySelectorAll('.fulfill-qty').forEach(input=>{
+    const qty=Math.min(parseInt(input.value)||0, parseInt(input.dataset.open)||0);
+    const unitPrice=parseFloat(input.dataset.unitPrice)||0;
+    const lineTotal=qty*unitPrice;
+    total+=lineTotal;
+    const lineId=input.dataset.lineId;
+    const el=document.getElementById('fulfill-line-val-'+lineId);
+    if(el) el.textContent=fmt(lineTotal);
+  });
+  const totalEl=document.getElementById('fulfill-total');
+  if(totalEl) totalEl.textContent=fmt(total);
+}
+
+async function submitFulfillPO(){
+  const po=pos.find(p=>p.id===_addPoId);if(!po)return;
+  const shipDate=document.getElementById('m-ship-date').value;
+  const invNum=document.getElementById('m-inv-num').value.trim();
+  const btn=document.getElementById('fulfill-btn');
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
+
+  // Collect line quantities
+  const linesToShip=[];
+  let invoiceTotal=0;
+  let hasError=false;
+
+  document.querySelectorAll('.fulfill-qty').forEach(input=>{
+    const qty=parseInt(input.value)||0;
+    const lineId=input.dataset.lineId;
+    const unitPrice=parseFloat(input.dataset.unitPrice)||0;
+    const openQty=parseInt(input.dataset.open)||0;
+    if(qty<0||qty>openQty){hasError=true;return;}
+    if(qty>0){
+      linesToShip.push({lineId,qty,unitPrice});
+      invoiceTotal+=qty*unitPrice;
+    }
+  });
+
+  if(hasError){alert('One or more quantities are invalid.');if(btn){btn.disabled=false;btn.textContent='Record shipment';}return;}
+  if(!linesToShip.length){alert('Enter a quantity greater than 0 for at least one line.');if(btn){btn.disabled=false;btn.textContent='Record shipment';}return;}
+
+  try{
+    // Save a shipment record for each line
+    for(const item of linesToShip){
+      const l=po.lines.find(x=>x.id===item.lineId);if(!l)continue;
+      const sh={date:shipDate,qty:item.qty,inv:invNum};
+      await dbSaveShipment(po.id,item.lineId,sh);
+      l.shipped.push(sh);
+    }
+
+    // Create ONE invoice record for the whole batch if invoice# provided
+    if(invNum){
+      const existing=invoices.find(i=>i.invoiceNumber===invNum);
+      const issueDate=shipDate||new Date().toISOString().slice(0,10);
+      const due=new Date(issueDate);due.setDate(due.getDate()+30);
+      const inv={
+        id:existing?.id,
+        invoiceNumber:invNum,
+        customer:po.customer,
+        poId:po.id,
+        soNumber:po.so||'',
+        issueDate,
+        dueDate:due.toISOString().slice(0,10),
+        amount:Math.round(invoiceTotal*100)/100,
+        notes:'',
+        paid:existing?.paid||false,
+        paidDate:existing?.paidDate||'',
+        paidAmount:existing?.paidAmount||null,
+        paidNotes:existing?.paidNotes||''
+      };
+      const saved=await dbSaveInvoice(inv);
+      if(existing){Object.assign(existing,mapInvoice(saved));}
+      else{invoices.unshift(mapInvoice(saved));}
+    }
+
+    closeModal();renderContent();
+  }catch(e){
+    alert('Error saving: '+e.message);
+    if(btn){btn.disabled=false;btn.textContent='Record shipment';}
+  }
+}
+
+// Keep showAddShipment as a no-op redirect in case called from old data
+function showAddShipment(poId,lId){showFulfillPO(poId);}
 
 function autoFillSku(val){
   const sku=skus.find(s=>s.desc===val);
@@ -1713,21 +1844,6 @@ async function submitAddLine(){
     await dbSaveLine(po.id,line,po.lines.length);
     po.lines.push(line);
     if(document.getElementById('m-savesku')?.checked) await syncListsFromPos([{customer:po.customer,lines:[line]}]);
-    closeModal();renderContent();
-  }catch(e){alert('Error: '+e.message);}
-}
-
-async function submitShipment(){
-  const po=pos.find(p=>p.id===_addPoId);
-  const l=po&&po.lines.find(x=>x.id===_addLineId);if(!l)return;
-  const qty=parseInt(document.getElementById('m-sqty').value)||0;
-  const open=lineOpenQty(l);
-  if(qty<=0||qty>open){alert(`Qty must be 1–${open}.`);return;}
-  const sh={date:document.getElementById('m-date').value,qty,inv:document.getElementById('m-inv').value.trim()};
-  try{
-    await dbSaveShipment(_addPoId,_addLineId,sh);
-    l.shipped.push(sh);
-    if(sh.inv) await autoUpsertInvoice(_addPoId,sh);
     closeModal();renderContent();
   }catch(e){alert('Error: '+e.message);}
 }
