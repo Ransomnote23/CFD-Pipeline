@@ -161,6 +161,31 @@ select:focus{border-color:var(--accent);}
 .migrate-box{background:var(--accent-dim);border:1px solid var(--accent);border-radius:8px;padding:20px;margin-bottom:16px;}
 .migrate-box h3{color:var(--accent);font-size:14px;margin-bottom:8px;}
 .migrate-box p{font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6;}
+.inv-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+.inv-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.inv-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;}
+.inv-header{display:grid;grid-template-columns:120px 1fr 100px 100px 110px 110px 120px 100px 80px;gap:8px;padding:9px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em;}
+.inv-row{display:grid;grid-template-columns:120px 1fr 100px 100px 110px 110px 120px 100px 80px;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;}
+.inv-row:last-child{border-bottom:none;}
+.inv-row:hover{background:rgba(255,255,255,.02);}
+.inv-row.paid-row{opacity:.65;}
+.inv-num{font-family:var(--mono);font-weight:500;color:var(--accent);}
+.inv-amt{font-family:var(--mono);font-weight:500;text-align:right;}
+.inv-date{font-family:var(--mono);font-size:11px;color:var(--text2);}
+.inv-overdue{color:var(--red)!important;}
+.pay-chk{width:15px;height:15px;accent-color:var(--green);cursor:pointer;}
+.month-group{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:8px 14px 6px;display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-bottom:1px solid var(--border);}
+.month-summary{font-family:var(--mono);font-size:11px;}
+.week-label{font-size:10px;color:var(--text3);font-family:var(--mono);padding:4px 14px;background:rgba(255,255,255,.015);border-bottom:0.5px solid var(--border);}
+.ar-banner{background:var(--red-dim);border:1px solid var(--red);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;}
+.ar-banner-text{font-size:13px;color:var(--red);}
+.ar-banner-amount{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--red);}
+.inv-monthly-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;}
+.imt-header{display:grid;grid-template-columns:1.2fr 80px 100px 100px 100px 100px;gap:8px;padding:9px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;}
+.imt-row{display:grid;grid-template-columns:1.2fr 80px 100px 100px 100px 100px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--mono);align-items:center;}
+.imt-row:last-child{border-bottom:none;}
+.imt-row.total-row{background:var(--surface2);font-weight:500;}
+.imt-val{text-align:right;}
 @keyframes spin{to{transform:rotate(360deg);}}
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -181,6 +206,7 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-item active" onclick="setTab('pipeline',this)"><div class="dot"></div>Pipeline</div>
       <div class="sidebar-item" onclick="setTab('projections',this)"><div class="dot"></div>Projections</div>
       <div class="sidebar-item" onclick="setTab('labor',this)"><div class="dot"></div>Labor</div>
+      <div class="sidebar-item" onclick="setTab('invoices',this)"><div class="dot"></div>Invoices</div>
       <div class="sidebar-section">Tools</div>
       <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export CSV</div>
       <div class="sidebar-item" onclick="document.getElementById('import-csv-file').click()"><div class="dot"></div>Import POs from CSV</div>
@@ -202,7 +228,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── App state ──────────────────────────────────────────────────
-let pos=[],customers=[],skus=[],employees=[],laborLogs=[];
+let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[];
 let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
 let expanded={},currentTab='pipeline';
 let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
@@ -218,7 +244,7 @@ function setStatus(state,text){
 async function dbLoad(){
   setStatus('loading','Loading...');
   try{
-    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes]=await Promise.all([
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes]=await Promise.all([
       sb.from('pos').select('*').order('created_at'),
       sb.from('line_items').select('*').order('sort_order'),
       sb.from('shipments').select('*').order('created_at'),
@@ -227,6 +253,7 @@ async function dbLoad(){
       sb.from('settings').select('*').eq('id',1).single(),
       sb.from('employees').select('*').order('name'),
       sb.from('labor_logs').select('*').order('month'),
+      sb.from('invoices').select('*').order('issue_date',{ascending:false}),
     ]);
     if(posRes.error) throw posRes.error;
 
@@ -261,6 +288,7 @@ async function dbLoad(){
     skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price),laborHours:Number(s.labor_hours||0)}));
     employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false}));
     laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
+    invoices=(invRes.data||[]).map(mapInvoice);
     if(setRes.data){
       const d=setRes.data;
       settings={companyName:d.company_name,divisionName:d.division_name,preparedBy:d.prepared_by,monthlyTarget:Number(d.monthly_target),laborCapacity:Number(d.labor_capacity)};
@@ -323,6 +351,87 @@ async function dbSaveLog(log){
 async function dbSaveSettings(){
   const {error}=await sb.from('settings').update({company_name:settings.companyName,division_name:settings.divisionName,prepared_by:settings.preparedBy,monthly_target:settings.monthlyTarget,labor_capacity:settings.laborCapacity}).eq('id',1);
   if(error)throw error;
+}
+
+// ── Invoice helpers ────────────────────────────────────────────
+function mapInvoice(r){
+  return{
+    id:r.id, invoiceNumber:r.invoice_number, customer:r.customer,
+    poId:r.po_id||'', soNumber:r.so_number||'',
+    issueDate:r.issue_date||'', dueDate:r.due_date||'',
+    amount:Number(r.amount), notes:r.notes||'',
+    paid:!!r.paid, paidDate:r.paid_date||'',
+    paidAmount:r.paid_amount!=null?Number(r.paid_amount):null,
+    paidNotes:r.paid_notes||''
+  };
+}
+
+async function dbSaveInvoice(inv){
+  const {data,error}=await sb.from('invoices').upsert({
+    id:inv.id||undefined,
+    invoice_number:inv.invoiceNumber,
+    customer:inv.customer,
+    po_id:inv.poId||null,
+    so_number:inv.soNumber||'',
+    issue_date:inv.issueDate||null,
+    due_date:inv.dueDate||null,
+    amount:inv.amount,
+    notes:inv.notes||'',
+    paid:inv.paid||false,
+    paid_date:inv.paidDate||null,
+    paid_amount:inv.paidAmount!=null?inv.paidAmount:null,
+    paid_notes:inv.paidNotes||'',
+    updated_at:new Date().toISOString()
+  },{onConflict:'invoice_number'}).select().single();
+  if(error)throw error;
+  return data;
+}
+
+async function dbDeleteInvoice(id){
+  const {error}=await sb.from('invoices').delete().eq('id',id);
+  if(error)throw error;
+}
+
+// Auto-create or update invoice when a shipment gets an invoice number
+async function autoUpsertInvoice(poId,shipment){
+  const invNum=shipment.inv.trim();
+  if(!invNum) return; // no invoice number, nothing to do
+  const po=pos.find(p=>p.id===poId);
+  if(!po) return;
+  // Calculate amount: sum all shipments on this PO that share this invoice number
+  let amount=0;
+  po.lines.forEach(l=>{
+    l.shipped.forEach(sh=>{
+      if(sh.inv===invNum) amount+=sh.qty*l.unitPrice;
+    });
+  });
+  // Also look across all POs in case invoice spans multiple
+  const existing=invoices.find(i=>i.invoiceNumber===invNum);
+  // Determine due date based on PO terms (default Net 30)
+  const issueDate=shipment.date||new Date().toISOString().slice(0,10);
+  const due=new Date(issueDate);
+  due.setDate(due.getDate()+30);
+  const inv={
+    id:existing?.id,
+    invoiceNumber:invNum,
+    customer:po.customer,
+    poId:po.id,
+    soNumber:po.so||'',
+    issueDate,
+    dueDate:due.toISOString().slice(0,10),
+    amount,
+    notes:'',
+    paid:existing?.paid||false,
+    paidDate:existing?.paidDate||'',
+    paidAmount:existing?.paidAmount||null,
+    paidNotes:existing?.paidNotes||''
+  };
+  const saved=await dbSaveInvoice(inv);
+  if(existing){
+    Object.assign(existing,mapInvoice(saved));
+  } else {
+    invoices.unshift(mapInvoice(saved));
+  }
 }
 
 // ── Sync lists from new PO data ────────────────────────────────
@@ -389,6 +498,7 @@ function renderContent(){
   if(currentTab==='pipeline')renderPipeline();
   else if(currentTab==='projections')renderProjections();
   else if(currentTab==='labor')renderLabor();
+  else if(currentTab==='invoices')renderInvoices();
   else if(currentTab==='lists')renderLists();
   else if(currentTab==='settings')renderSettings();
 }
@@ -819,6 +929,361 @@ async function removeEmployee(id){
   }catch(e){alert('Error: '+e.message);}
 }
 
+// ── Invoices ───────────────────────────────────────────────────
+let invFilterStatus='all';   // all | unpaid | paid | overdue
+let invFilterCustomer='';
+let invViewMode='month';     // month | week | list
+let invSearchQ='';
+
+function invIsOverdue(inv){
+  if(inv.paid||!inv.dueDate) return false;
+  return new Date(inv.dueDate)<new Date();
+}
+function invDaysOverdue(inv){
+  if(!inv.dueDate||inv.paid) return 0;
+  return Math.max(0,Math.round((new Date()-new Date(inv.dueDate))/(1000*60*60*24)));
+}
+function invWeekLabel(dateStr){
+  const d=new Date(dateStr);
+  const start=new Date(d);start.setDate(d.getDate()-d.getDay());
+  const end=new Date(start);end.setDate(start.getDate()+6);
+  return`Week of ${start.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${end.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+}
+function invMonthKey(dateStr){
+  if(!dateStr) return'';
+  const d=new Date(dateStr);
+  return d.toLocaleString('default',{month:'long',year:'numeric'});
+}
+function invWeekKey(dateStr){
+  if(!dateStr) return'';
+  const d=new Date(dateStr);
+  d.setDate(d.getDate()-d.getDay());
+  return d.toISOString().slice(0,10);
+}
+
+function renderInvoices(){
+  const today=new Date(); today.setHours(0,0,0,0);
+  const totalBilled=invoices.reduce((s,i)=>s+i.amount,0);
+  const totalPaid=invoices.filter(i=>i.paid).reduce((s,i)=>s+(i.paidAmount??i.amount),0);
+  const totalOutstanding=invoices.filter(i=>!i.paid).reduce((s,i)=>s+i.amount,0);
+  const overdueInvs=invoices.filter(i=>invIsOverdue(i));
+  const totalOverdue=overdueInvs.reduce((s,i)=>s+i.amount,0);
+  const unpaidCount=invoices.filter(i=>!i.paid).length;
+
+  // Filter
+  const custs=[...new Set(invoices.map(i=>i.customer))].sort();
+  const custOpts=custs.map(c=>`<option value="${c}"${invFilterCustomer===c?' selected':''}>${c}</option>`).join('');
+  let filtered=invoices.filter(i=>{
+    if(invFilterStatus==='unpaid'&&i.paid) return false;
+    if(invFilterStatus==='paid'&&!i.paid) return false;
+    if(invFilterStatus==='overdue'&&!invIsOverdue(i)) return false;
+    if(invFilterCustomer&&i.customer!==invFilterCustomer) return false;
+    if(invSearchQ){
+      const q=invSearchQ.toLowerCase();
+      if(!(i.invoiceNumber+i.customer+i.soNumber+(i.poId||'')).toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  filtered=[...filtered].sort((a,b)=>new Date(b.issueDate)-new Date(a.issueDate));
+
+  const overdueBanner=totalOverdue>0?`
+    <div class="ar-banner">
+      <div>
+        <div class="ar-banner-text" style="font-weight:600;margin-bottom:2px;">⚠ Overdue invoices</div>
+        <div class="ar-banner-text" style="font-size:12px;">${overdueInvs.length} invoice${overdueInvs.length!==1?'s':''} past due date — action required</div>
+      </div>
+      <div class="ar-banner-amount">${fmt(totalOverdue)}</div>
+    </div>`:'';
+
+  // Build invoice rows HTML
+  function invRowHtml(inv){
+    const od=invIsOverdue(inv);
+    const po=pos.find(p=>p.id===inv.poId);
+    const cpoDisplay=po?po.cpo:inv.poId||'—';
+    const daysOd=invDaysOverdue(inv);
+    const dueDateDisplay=inv.dueDate
+      ?`<span class="${od?'inv-overdue':''}">${inv.dueDate}${od?` (+${daysOd}d)`:''}</span>`
+      :'—';
+    const paidDisplay=inv.paid
+      ?`<span style="color:var(--green);font-family:var(--mono);font-size:11px;">${inv.paidDate||'✓'}</span>`
+      :`<span style="color:var(--text3);font-size:11px;">${od?'<span style="color:var(--red);">OVERDUE</span>':'pending'}</span>`;
+    return`<div class="inv-row${inv.paid?' paid-row':''}">
+      <span class="inv-num">${inv.invoiceNumber}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${inv.customer}">${inv.customer}</span>
+      <span class="inv-date" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${cpoDisplay}">${cpoDisplay}</span>
+      <span class="inv-date">${inv.soNumber||'—'}</span>
+      <span class="inv-date">${inv.issueDate||'—'}</span>
+      <span class="inv-date">${dueDateDisplay}</span>
+      <span class="inv-amt${od&&!inv.paid?' inv-overdue':''}">${fmt(inv.amount)}</span>
+      <span>${paidDisplay}</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" class="pay-chk" ${inv.paid?'checked':''} title="${inv.paid?'Mark unpaid':'Mark paid'}"
+          onchange="togglePaid('${inv.id}',this.checked)"/>
+        <button class="btn-ghost" style="font-size:10px;" onclick="showInvoiceDetail('${inv.id}')">⋯</button>
+        <button class="btn-ghost" style="font-size:10px;color:var(--red);" onclick="deleteInvoice('${inv.id}')">✕</button>
+      </div>
+    </div>`;
+  }
+
+  let tableHtml='';
+  if(invViewMode==='list'){
+    tableHtml=`<div class="inv-table">
+      <div class="inv-header"><span>Invoice#</span><span>Customer</span><span>Cust PO#</span><span>SO#</span><span>Issued</span><span>Due</span><span style="text-align:right">Amount</span><span>Payment</span><span></span></div>
+      ${filtered.map(invRowHtml).join('')||'<div style="padding:16px 14px;font-size:12px;color:var(--text3);">No invoices match your filters</div>'}
+    </div>`;
+  } else if(invViewMode==='month'){
+    const byMonth={};
+    filtered.forEach(inv=>{
+      const k=invMonthKey(inv.issueDate);
+      if(!byMonth[k])byMonth[k]=[];
+      byMonth[k].push(inv);
+    });
+    tableHtml=Object.entries(byMonth).map(([month,invs])=>{
+      const total=invs.reduce((s,i)=>s+i.amount,0);
+      const paid=invs.filter(i=>i.paid).reduce((s,i)=>s+(i.paidAmount??i.amount),0);
+      const outstanding=total-paid;
+      return`<div class="inv-table">
+        <div class="month-group">
+          <span>${month}</span>
+          <span class="month-summary">${invs.length} invoice${invs.length!==1?'s':''} &nbsp;·&nbsp; billed: ${fmt(total)} &nbsp;·&nbsp; paid: <span style="color:var(--green);">${fmt(paid)}</span> &nbsp;·&nbsp; outstanding: <span style="color:${outstanding>0?'var(--amber)':'var(--green)'};">${fmt(outstanding)}</span></span>
+        </div>
+        <div class="inv-header"><span>Invoice#</span><span>Customer</span><span>Cust PO#</span><span>SO#</span><span>Issued</span><span>Due</span><span style="text-align:right">Amount</span><span>Payment</span><span></span></div>
+        ${invs.map(invRowHtml).join('')}
+      </div>`;
+    }).join('')||'<div style="padding:16px;font-size:12px;color:var(--text3);">No invoices match your filters</div>';
+  } else { // week
+    const byWeek={};
+    filtered.forEach(inv=>{
+      const k=invWeekKey(inv.issueDate);
+      if(!byWeek[k])byWeek[k]=[];
+      byWeek[k].push(inv);
+    });
+    tableHtml=Object.entries(byWeek).sort((a,b)=>b[0].localeCompare(a[0])).map(([wk,invs])=>{
+      const total=invs.reduce((s,i)=>s+i.amount,0);
+      const paid=invs.filter(i=>i.paid).reduce((s,i)=>s+(i.paidAmount??i.amount),0);
+      return`<div class="inv-table">
+        <div class="month-group">
+          <span>${invWeekLabel(wk+' 12:00')}</span>
+          <span class="month-summary">${invs.length} invoice${invs.length!==1?'s':''} &nbsp;·&nbsp; ${fmt(total)} billed &nbsp;·&nbsp; <span style="color:var(--green);">${fmt(paid)}</span> paid</span>
+        </div>
+        <div class="inv-header"><span>Invoice#</span><span>Customer</span><span>Cust PO#</span><span>SO#</span><span>Issued</span><span>Due</span><span style="text-align:right">Amount</span><span>Payment</span><span></span></div>
+        ${invs.map(invRowHtml).join('')}
+      </div>`;
+    }).join('')||'<div style="padding:16px;font-size:12px;color:var(--text3);">No invoices match your filters</div>';
+  }
+
+  // Monthly summary table
+  const monthSummaryMap={};
+  invoices.forEach(inv=>{
+    const k=invMonthKey(inv.issueDate);
+    if(!k) return;
+    if(!monthSummaryMap[k])monthSummaryMap[k]={count:0,billed:0,paid:0,overdue:0};
+    monthSummaryMap[k].count++;
+    monthSummaryMap[k].billed+=inv.amount;
+    if(inv.paid)monthSummaryMap[k].paid+=(inv.paidAmount??inv.amount);
+    if(invIsOverdue(inv))monthSummaryMap[k].overdue+=inv.amount;
+  });
+  const monthSummaryRows=Object.entries(monthSummaryMap).map(([m,d],i)=>`
+    <div class="imt-row" style="${i%2?'':'background:rgba(255,255,255,.02)'}">
+      <span>${m}</span>
+      <span class="imt-val">${d.count}</span>
+      <span class="imt-val">${fmt(d.billed)}</span>
+      <span class="imt-val green">${fmt(d.paid)}</span>
+      <span class="imt-val">${fmt(d.billed-d.paid)}</span>
+      <span class="imt-val${d.overdue>0?' red':''}">${d.overdue>0?fmt(d.overdue):'—'}</span>
+    </div>`).join('');
+
+  document.getElementById('content').innerHTML=`
+    <div class="inv-metrics">
+      <div class="metric"><div class="metric-label">Total billed</div><div class="metric-value">${fmt(totalBilled)}</div><div class="metric-sub">${invoices.length} invoices</div></div>
+      <div class="metric"><div class="metric-label">Collected</div><div class="metric-value green">${fmt(totalPaid)}</div></div>
+      <div class="metric"><div class="metric-label">Outstanding</div><div class="metric-value amber">${fmt(totalOutstanding)}</div><div class="metric-sub">${unpaidCount} unpaid</div></div>
+      <div class="metric"><div class="metric-label">Overdue</div><div class="metric-value${totalOverdue>0?' red':''}">${fmt(totalOverdue)}</div><div class="metric-sub">${overdueInvs.length} past due</div></div>
+      <div class="metric"><div class="metric-label">Collection rate</div><div class="metric-value${totalBilled>0&&totalPaid/totalBilled>0.9?' green':' amber'}">${totalBilled>0?Math.round(totalPaid/totalBilled*100):0}%</div></div>
+    </div>
+
+    ${overdueBanner}
+
+    <div class="inv-toolbar">
+      <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" placeholder="Search invoice#, customer, SO#..." value="${invSearchQ}" oninput="invSearchQ=this.value;renderInvoices()"/></div>
+      <select onchange="invFilterStatus=this.value;renderInvoices()">
+        <option value="all"${invFilterStatus==='all'?' selected':''}>All invoices</option>
+        <option value="unpaid"${invFilterStatus==='unpaid'?' selected':''}>Unpaid only</option>
+        <option value="paid"${invFilterStatus==='paid'?' selected':''}>Paid only</option>
+        <option value="overdue"${invFilterStatus==='overdue'?' selected':''}>Overdue only</option>
+      </select>
+      <select onchange="invFilterCustomer=this.value;renderInvoices()">
+        <option value="">All customers</option>${custOpts}
+      </select>
+      <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px;">
+        <button class="btn btn-xs${invViewMode==='month'?' btn-primary':''}" style="border:none;" onclick="invViewMode='month';renderInvoices()">By month</button>
+        <button class="btn btn-xs${invViewMode==='week'?' btn-primary':''}" style="border:none;" onclick="invViewMode='week';renderInvoices()">By week</button>
+        <button class="btn btn-xs${invViewMode==='list'?' btn-primary':''}" style="border:none;" onclick="invViewMode='list';renderInvoices()">List</button>
+      </div>
+      <button class="btn btn-primary" onclick="showAddInvoice()">+ Add invoice</button>
+      <button class="btn" onclick="exportInvoiceCSV()">Export CSV</button>
+    </div>
+
+    ${tableHtml}
+
+    <div class="inv-monthly-table">
+      <div style="padding:10px 14px 6px;font-size:12px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);">Monthly AR summary</div>
+      <div class="imt-header"><span>Month</span><span class="imt-val">Count</span><span class="imt-val">Billed</span><span class="imt-val">Collected</span><span class="imt-val">Outstanding</span><span class="imt-val">Overdue</span></div>
+      ${monthSummaryRows||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No invoices yet</div>'}
+      ${invoices.length>0?`<div class="imt-row total-row" style="grid-template-columns:1.2fr 80px 100px 100px 100px 100px;">
+        <span>TOTAL</span><span class="imt-val">${invoices.length}</span>
+        <span class="imt-val">${fmt(totalBilled)}</span>
+        <span class="imt-val green">${fmt(totalPaid)}</span>
+        <span class="imt-val">${fmt(totalOutstanding)}</span>
+        <span class="imt-val${totalOverdue>0?' red':''}">${totalOverdue>0?fmt(totalOverdue):'—'}</span>
+      </div>`:''}
+    </div>`;
+}
+
+async function togglePaid(id,paid){
+  const inv=invoices.find(i=>i.id===id);if(!inv)return;
+  inv.paid=paid;
+  if(paid&&!inv.paidDate) inv.paidDate=new Date().toISOString().slice(0,10);
+  if(!paid){inv.paidDate='';inv.paidAmount=null;}
+  try{
+    await dbSaveInvoice(inv);
+    renderInvoices();
+  }catch(e){alert('Error saving: '+e.message);}
+}
+
+function showInvoiceDetail(id){
+  const inv=invoices.find(i=>i.id===id);if(!inv)return;
+  const po=pos.find(p=>p.id===inv.poId);
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-title">Invoice ${inv.invoiceNumber}</div>
+      <div class="modal-grid">
+        <div><div class="field-label" style="margin-bottom:4px;">Invoice#</div><input id="di-num" class="field-input" type="text" value="${inv.invoiceNumber}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Customer</div><input id="di-cust" class="field-input" type="text" value="${inv.customer}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Amount ($)</div><input id="di-amt" class="field-input" type="number" step="0.01" value="${inv.amount}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Issue date</div><input id="di-idate" class="field-input" type="date" value="${inv.issueDate}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Due date</div><input id="di-ddate" class="field-input" type="date" value="${inv.dueDate||''}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">SO#</div><input id="di-so" class="field-input" type="text" value="${inv.soNumber}" style="width:100%;font-size:13px;"/></div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="di-notes" class="field-input" type="text" value="${inv.notes}" placeholder="Internal notes" style="width:100%;font-size:13px;"/></div>
+        <div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;">Payment</div>
+          <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:center;">
+            <label class="chk-label"><input type="checkbox" id="di-paid" ${inv.paid?'checked':''}/> Paid</label>
+            <div><div class="field-label" style="margin-bottom:4px;">Date paid</div><input id="di-pdate" class="field-input" type="date" value="${inv.paidDate||''}" style="width:100%;font-size:12px;"/></div>
+            <div><div class="field-label" style="margin-bottom:4px;">Amount paid ($)</div><input id="di-pamt" class="field-input" type="number" step="0.01" value="${inv.paidAmount!=null?inv.paidAmount:inv.amount}" style="width:100%;font-size:12px;"/></div>
+          </div>
+          <div style="margin-top:8px;"><div class="field-label" style="margin-bottom:4px;">Payment notes</div><input id="di-pnotes" class="field-input" type="text" value="${inv.paidNotes}" placeholder="Check#, wire ref, etc." style="width:100%;font-size:12px;"/></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveInvoiceDetail('${id}')">Save</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveInvoiceDetail(id){
+  const inv=invoices.find(i=>i.id===id);if(!inv)return;
+  inv.invoiceNumber=document.getElementById('di-num').value.trim();
+  inv.customer=document.getElementById('di-cust').value.trim();
+  inv.amount=parseFloat(document.getElementById('di-amt').value)||0;
+  inv.issueDate=document.getElementById('di-idate').value;
+  inv.dueDate=document.getElementById('di-ddate').value;
+  inv.soNumber=document.getElementById('di-so').value.trim();
+  inv.notes=document.getElementById('di-notes').value.trim();
+  inv.paid=document.getElementById('di-paid').checked;
+  inv.paidDate=document.getElementById('di-pdate').value;
+  inv.paidAmount=parseFloat(document.getElementById('di-pamt').value)||null;
+  inv.paidNotes=document.getElementById('di-pnotes').value.trim();
+  try{await dbSaveInvoice(inv);closeModal();renderInvoices();}
+  catch(e){alert('Error: '+e.message);}
+}
+
+function showAddInvoice(){
+  const custOpts=customers.map(c=>`<option value="${c.name}"/>`).join('');
+  const today=new Date().toISOString().slice(0,10);
+  const due=new Date();due.setDate(due.getDate()+30);
+  const dueStr=due.toISOString().slice(0,10);
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-title">Add invoice</div>
+      <datalist id="dl-inv-cust">${custOpts}</datalist>
+      <div class="modal-grid">
+        <div><div class="field-label" style="margin-bottom:4px;">Invoice# *</div><input id="ai-num" class="field-input" type="text" placeholder="e.g. INV-1001" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Customer *</div><input id="ai-cust" class="field-input" type="text" list="dl-inv-cust" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Amount ($) *</div><input id="ai-amt" class="field-input" type="number" step="0.01" value="0" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Issue date</div><input id="ai-idate" class="field-input" type="date" value="${today}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Due date</div><input id="ai-ddate" class="field-input" type="date" value="${dueStr}" style="width:100%;font-size:13px;"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">SO#</div><input id="ai-so" class="field-input" type="text" placeholder="Cin7 SO#" style="width:100%;font-size:13px;"/></div>
+        <div class="full"><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="ai-notes" class="field-input" type="text" placeholder="Optional notes" style="width:100%;font-size:13px;"/></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddInvoice()">Add invoice</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function submitAddInvoice(){
+  const num=document.getElementById('ai-num').value.trim();
+  const cust=document.getElementById('ai-cust').value.trim();
+  const amt=parseFloat(document.getElementById('ai-amt').value)||0;
+  if(!num||!cust){alert('Invoice# and customer are required.');return;}
+  if(invoices.find(i=>i.invoiceNumber===num)){alert(`Invoice ${num} already exists.`);return;}
+  const inv={
+    invoiceNumber:num,customer:cust,poId:'',
+    soNumber:document.getElementById('ai-so').value.trim(),
+    issueDate:document.getElementById('ai-idate').value,
+    dueDate:document.getElementById('ai-ddate').value,
+    amount:amt,notes:document.getElementById('ai-notes').value.trim(),
+    paid:false,paidDate:'',paidAmount:null,paidNotes:''
+  };
+  try{
+    const saved=await dbSaveInvoice(inv);
+    invoices.unshift(mapInvoice(saved));
+    closeModal();renderInvoices();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+async function deleteInvoice(id){
+  if(!confirm('Delete this invoice? This cannot be undone.'))return;
+  await dbDeleteInvoice(id);
+  invoices=invoices.filter(i=>i.id!==id);
+  renderInvoices();
+}
+
+function exportInvoiceCSV(){
+  const rows=[['Invoice#','Customer','Customer PO#','Cin7 SO#','Issue Date','Due Date','Amount','Paid','Date Paid','Amount Paid','Payment Notes','Days Overdue','Notes']];
+  const src=invFilterStatus!=='all'||invFilterCustomer||invSearchQ
+    ? invoices.filter(i=>{
+        if(invFilterStatus==='unpaid'&&i.paid) return false;
+        if(invFilterStatus==='paid'&&!i.paid) return false;
+        if(invFilterStatus==='overdue'&&!invIsOverdue(i)) return false;
+        if(invFilterCustomer&&i.customer!==invFilterCustomer) return false;
+        if(invSearchQ&&!(i.invoiceNumber+i.customer+i.soNumber).toLowerCase().includes(invSearchQ.toLowerCase())) return false;
+        return true;
+      })
+    : invoices;
+  const po=id=>pos.find(p=>p.id===id);
+  src.forEach(i=>{
+    const p=po(i.poId);
+    rows.push([
+      i.invoiceNumber,`"${i.customer}"`,
+      p?p.cpo:i.poId||'',
+      i.soNumber,i.issueDate,i.dueDate,
+      i.amount,i.paid?'Y':'N',
+      i.paidDate||'',
+      i.paidAmount!=null?i.paidAmount:'',
+      `"${i.paidNotes||''}"`,
+      invDaysOverdue(i)||'',
+      `"${i.notes||''}"`
+    ]);
+  });
+  dl(rows.map(r=>r.join(',')).join('\n'),`invoices_${today()}.csv`,'text/csv');
+}
+
 // ── Lists (Customers & SKUs) ───────────────────────────────────
 function renderLists(){
   const cRows=customers.map(c=>`
@@ -985,6 +1450,7 @@ async function setShipInv(poId,lId,si,val){
   const l=po&&po.lines.find(x=>x.id===lId);if(!l)return;
   l.shipped[si].inv=val.trim();
   await dbSaveShipment(poId,lId,l.shipped[si]);
+  if(val.trim()) await autoUpsertInvoice(poId,l.shipped[si]);
 }
 
 // ── Modals ─────────────────────────────────────────────────────
@@ -1117,7 +1583,9 @@ async function submitShipment(){
   const sh={date:document.getElementById('m-date').value,qty,inv:document.getElementById('m-inv').value.trim()};
   try{
     await dbSaveShipment(_addPoId,_addLineId,sh);
-    l.shipped.push(sh);closeModal();renderContent();
+    l.shipped.push(sh);
+    if(sh.inv) await autoUpsertInvoice(_addPoId,sh);
+    closeModal();renderContent();
   }catch(e){alert('Error: '+e.message);}
 }
 
