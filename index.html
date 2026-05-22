@@ -208,9 +208,12 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-item" onclick="setTab('labor',this)"><div class="dot"></div>Labor</div>
       <div class="sidebar-item" onclick="setTab('invoices',this)"><div class="dot"></div>Invoices</div>
       <div class="sidebar-section">Tools</div>
-      <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export CSV</div>
+      <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export pipeline CSV</div>
       <div class="sidebar-item" onclick="document.getElementById('import-csv-file').click()"><div class="dot"></div>Import POs from CSV</div>
       <input type="file" id="import-csv-file" accept=".csv" style="display:none" onchange="importCSV(event)"/>
+      <div class="sidebar-item" onclick="document.getElementById('import-inv-file').click()"><div class="dot"></div>Import invoices from CSV</div>
+      <input type="file" id="import-inv-file" accept=".csv" style="display:none" onchange="importInvoiceCSV(event)"/>
+      <div class="sidebar-item" onclick="downloadInvoiceTemplate()"><div class="dot"></div>Invoice CSV template</div>
       <div class="sidebar-section">Config</div>
       <div class="sidebar-item" onclick="setTab('lists',this)"><div class="dot"></div>Customers &amp; SKUs</div>
       <div class="sidebar-item" onclick="setTab('settings',this)"><div class="dot"></div>Settings</div>
@@ -1255,7 +1258,7 @@ async function deleteInvoice(id){
 }
 
 function exportInvoiceCSV(){
-  const rows=[['Invoice#','Customer','Customer PO#','Cin7 SO#','Issue Date','Due Date','Amount','Paid','Date Paid','Amount Paid','Payment Notes','Days Overdue','Notes']];
+  const rows=[['invoice_number','customer','cpo','so_number','issue_date','due_date','amount','paid','paid_date','paid_amount','paid_notes','notes']];
   const src=invFilterStatus!=='all'||invFilterCustomer||invSearchQ
     ? invoices.filter(i=>{
         if(invFilterStatus==='unpaid'&&i.paid) return false;
@@ -1266,22 +1269,158 @@ function exportInvoiceCSV(){
         return true;
       })
     : invoices;
-  const po=id=>pos.find(p=>p.id===id);
+  const poMap=id=>pos.find(p=>p.id===id);
   src.forEach(i=>{
-    const p=po(i.poId);
+    const p=poMap(i.poId);
     rows.push([
       i.invoiceNumber,`"${i.customer}"`,
       p?p.cpo:i.poId||'',
-      i.soNumber,i.issueDate,i.dueDate,
+      i.soNumber,i.issueDate||'',i.dueDate||'',
       i.amount,i.paid?'Y':'N',
       i.paidDate||'',
       i.paidAmount!=null?i.paidAmount:'',
       `"${i.paidNotes||''}"`,
-      invDaysOverdue(i)||'',
       `"${i.notes||''}"`
     ]);
   });
   dl(rows.map(r=>r.join(',')).join('\n'),`invoices_${today()}.csv`,'text/csv');
+}
+
+function downloadInvoiceTemplate(){
+  const rows=[
+    ['invoice_number','customer','cpo','so_number','issue_date','due_date','amount','paid','paid_date','paid_amount','paid_notes','notes'],
+    ['INV-1001','Cascade Engine Center LLC','918781','SO-1041','2026-01-15','2026-02-14','4630.99','N','','','',''],
+    ['INV-1002','Inventech Marine Solutions','0009133','SO-1045','2026-02-01','2026-03-03','14144.04','Y','2026-03-01','14144.04','Wire transfer',''],
+    ['INV-1003','Super Pacific Inc.','P00700','','','','2975.00','N','','','','Leave dates blank if unknown'],
+  ];
+  dl(rows.map(r=>r.join(',')).join('\n'),'invoice_import_template.csv','text/csv');
+}
+
+async function importInvoiceCSV(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    try{
+      const lines=ev.target.result.split('\n').filter(l=>l.trim());
+      if(lines.length<2){alert('File is empty or has no data rows.');return;}
+      const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase());
+      const idx=h=>headers.indexOf(h);
+      const parsed=[];
+      for(let i=1;i<lines.length;i++){
+        const cols=parseCSVLine(lines[i]);
+        const invNum=cols[idx('invoice_number')]?.trim();
+        if(!invNum)continue;
+        const customer=cols[idx('customer')]?.trim()||'';
+        const amount=parseFloat(cols[idx('amount')])||0;
+        if(!customer||!amount)continue;
+        parsed.push({
+          invoiceNumber:invNum,customer,poId:'',
+          soNumber:cols[idx('so_number')]?.trim()||'',
+          issueDate:cols[idx('issue_date')]?.trim()||'',
+          dueDate:cols[idx('due_date')]?.trim()||'',
+          amount,notes:cols[idx('notes')]?.trim()||'',
+          paid:cols[idx('paid')]?.trim().toUpperCase()==='Y',
+          paidDate:cols[idx('paid_date')]?.trim()||'',
+          paidAmount:cols[idx('paid_amount')]?.trim()?parseFloat(cols[idx('paid_amount')]):null,
+          paidNotes:cols[idx('paid_notes')]?.trim()||'',
+          _cpo:cols[idx('cpo')]?.trim()||'',
+        });
+      }
+      if(!parsed.length){alert('No valid rows found. Check that invoice_number, customer, and amount columns are present.');return;}
+      parsed.forEach(inv=>{
+        if(inv._cpo){
+          const match=pos.find(p=>p.cpo===inv._cpo||p.id===inv._cpo);
+          if(match){inv.poId=match.id;if(!inv.soNumber)inv.soNumber=match.so||'';}
+        }
+        delete inv._cpo;
+      });
+      const existingNums=new Set(invoices.map(i=>i.invoiceNumber));
+      const toAdd=parsed.filter(i=>!existingNums.has(i.invoiceNumber));
+      const dupes=parsed.filter(i=>existingNums.has(i.invoiceNumber));
+      const missingDates=toAdd.filter(i=>!i.issueDate);
+      if(!toAdd.length){alert(`All ${parsed.length} invoice(s) already exist.`);e.target.value='';return;}
+      let confirmMsg=`Ready to import ${toAdd.length} invoice(s)`;
+      if(dupes.length) confirmMsg+=`, skipping ${dupes.length} duplicate(s)`;
+      if(missingDates.length) confirmMsg+=`.\n\n⚠ ${missingDates.length} invoice(s) have no date — use the bulk date editor after import`;
+      if(!confirm(confirmMsg+'\n\nProceed?')){e.target.value='';return;}
+      setStatus('loading','Importing...');
+      let done=0,errs=0;
+      for(const inv of toAdd){
+        try{const saved=await dbSaveInvoice(inv);invoices.unshift(mapInvoice(saved));done++;}
+        catch(err){errs++;console.error('Invoice import error',inv.invoiceNumber,err);}
+      }
+      setStatus('ok','● Live');
+      e.target.value='';
+      currentTab='invoices';
+      document.querySelectorAll('.sidebar-item').forEach(el=>el.classList.remove('active'));
+      renderContent();
+      const stillMissing=invoices.filter(i=>!i.issueDate);
+      if(stillMissing.length>0){
+        setTimeout(()=>{
+          alert(`Imported ${done} invoice${done!==1?'s':''}${errs?` (${errs} failed)`:''}.\n\n${stillMissing.length} invoice${stillMissing.length!==1?'s':''} are missing dates — the bulk date editor will open now.`);
+          showBulkDateEdit();
+        },200);
+      } else {
+        alert('Imported '+done+' invoice'+(done!==1?'s':'')+(errs?' ('+errs+' failed)':'')+' successfully.');
+      }
+    }catch(err){setStatus('err','✕ Import error');alert('Error: '+err.message);console.error(err);e.target.value='';}
+  };
+  r.readAsText(file);
+}
+
+function showBulkDateEdit(){
+  const missing=invoices.filter(i=>!i.issueDate);
+  if(!missing.length){alert('All invoices already have dates.');return;}
+  const today2=new Date().toISOString().slice(0,10);
+  const rows=missing.map(inv=>`
+    <div style="display:grid;grid-template-columns:130px 1fr 130px 130px;gap:8px;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);">
+      <span class="inv-num" style="font-size:11px;">${inv.invoiceNumber}</span>
+      <span style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${inv.customer}</span>
+      <input class="field-input" type="date" id="bde-issue-${inv.id}" value="${today2}" style="font-size:12px;width:100%;"/>
+      <input class="field-input" type="date" id="bde-due-${inv.id}" value="" style="font-size:12px;width:100%;"/>
+    </div>`).join('');
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-title">Set dates — ${missing.length} invoice${missing.length!==1?'s':''} missing issue date</div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Enter issue date for each. Leave due date blank to auto-set as Net 30.</p>
+      <div style="display:grid;grid-template-columns:130px 1fr 130px 130px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border2);margin-bottom:2px;">
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Invoice#</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Customer</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Issue date *</span>
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Due date</span>
+      </div>
+      <div style="max-height:420px;overflow-y:auto;padding-right:4px;">${rows}</div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-xs" onclick="setAllIssueDates()">Set all → today</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveBulkDates()">Save all dates</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function setAllIssueDates(){
+  const t=new Date().toISOString().slice(0,10);
+  document.querySelectorAll('[id^="bde-issue-"]').forEach(el=>el.value=t);
+}
+
+async function saveBulkDates(){
+  const missing=invoices.filter(i=>!i.issueDate);
+  let saved=0,skipped=0,errs=0;
+  for(const inv of missing){
+    const issueEl=document.getElementById('bde-issue-'+inv.id);
+    if(!issueEl?.value){skipped++;continue;}
+    inv.issueDate=issueEl.value;
+    const dueEl=document.getElementById('bde-due-'+inv.id);
+    if(dueEl?.value){inv.dueDate=dueEl.value;}
+    else{const d=new Date(inv.issueDate);d.setDate(d.getDate()+30);inv.dueDate=d.toISOString().slice(0,10);}
+    try{await dbSaveInvoice(inv);saved++;}
+    catch(err){errs++;console.error(err);}
+  }
+  closeModal();renderInvoices();
+  alert(`Updated ${saved} invoice${saved!==1?'s':''}${skipped?`, skipped ${skipped} (no date entered)`:''}${errs?`, ${errs} error(s)`:''}.`);
 }
 
 // ── Lists (Customers & SKUs) ───────────────────────────────────
