@@ -1208,7 +1208,7 @@ async function saveInvoiceDetail(id){
 }
 
 function showAddInvoice(){
-  const custOpts=customers.map(c=>`<option value="${c.name}"/>`).join('');
+  const custOpts=customers.map(c=>`<option value="${escHtml(c.name)}"/>`).join('');
   const today=new Date().toISOString().slice(0,10);
   const due=new Date();due.setDate(due.getDate()+30);
   const dueStr=due.toISOString().slice(0,10);
@@ -1599,12 +1599,21 @@ async function setShipInv(poId,lId,si,val){
 // ── Modals ─────────────────────────────────────────────────────
 function closeModal(){document.getElementById('modal-area').innerHTML='';}
 
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 function showAddPO(){
-  const cOpts=customers.map(c=>`<option value="${c.name}"/>`).join('');
+  const cOpts=customers.map(c=>`<option value="${escHtml(c.name)}"/>`).join('');
+  const sOpts=skus.map(s=>`<option value="${escHtml(s.desc)}"/>`).join('');
+  // Build initial empty line row
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
+    <div class="modal" style="max-width:720px;">
       <div class="modal-title">New purchase order</div>
       <datalist id="dl-c">${cOpts}</datalist>
+      <datalist id="dl-s-po">${sOpts}</datalist>
+
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">PO details</div>
       <div class="modal-grid">
         <div><div class="field-label" style="margin-bottom:4px;">Customer *</div><input id="m-cust" type="text" list="dl-c" placeholder="Type or select"/></div>
         <div><div class="field-label" style="margin-bottom:4px;">Customer PO# *</div><input id="m-cpo" type="text" placeholder="PO number"/></div>
@@ -1618,6 +1627,17 @@ function showAddPO(){
         </div>
         <div class="full"><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="m-notes" type="text" placeholder="Internal notes"/></div>
       </div>
+
+      <div style="border-top:1px solid var(--border);margin:14px 0 10px;padding-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">Line items <span id="po-line-count" style="color:var(--text3);font-weight:400;">(0)</span></div>
+          <button class="btn btn-xs" onclick="addPoLineRow()">+ Add line</button>
+        </div>
+        <div id="po-lines-container">
+          <div style="font-size:12px;color:var(--text3);padding:8px 0;" id="po-lines-empty">No lines added yet — click + Add line</div>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="add-po-btn" onclick="submitAddPO()">Add PO</button>
@@ -1626,13 +1646,80 @@ function showAddPO(){
   </div>`;
 }
 
+let _poLineCount=0;
+function addPoLineRow(){
+  const container=document.getElementById('po-lines-container');
+  const empty=document.getElementById('po-lines-empty');
+  if(empty) empty.remove();
+  _poLineCount++;
+  const idx=_poLineCount;
+  const row=document.createElement('div');
+  row.id=`po-line-row-${idx}`;
+  row.style.cssText='display:grid;grid-template-columns:1fr 70px 110px 90px auto;gap:8px;align-items:end;padding:6px 0;border-bottom:0.5px solid var(--border);';
+  row.innerHTML=`
+    <div>
+      ${idx===1?`<div class="field-label" style="margin-bottom:4px;">Description</div>`:''}
+      <input class="field-input po-line-desc" type="text" list="dl-s-po" placeholder="Type or select from SKU library"
+        oninput="autoFillPoLine(this,${idx})" style="width:100%;font-size:12px;"/>
+    </div>
+    <div>
+      ${idx===1?`<div class="field-label" style="margin-bottom:4px;">Qty</div>`:''}
+      <input class="field-input" id="po-line-qty-${idx}" type="number" min="1" value="1" style="width:100%;font-size:12px;text-align:center;"/>
+    </div>
+    <div>
+      ${idx===1?`<div class="field-label" style="margin-bottom:4px;">Unit price ($)</div>`:''}
+      <input class="field-input" id="po-line-price-${idx}" type="number" min="0" step="0.01" value="0" style="width:100%;font-size:12px;"/>
+    </div>
+    <div>
+      ${idx===1?`<div class="field-label" style="margin-bottom:4px;">Unit</div>`:''}
+      <input class="field-input" id="po-line-unit-${idx}" type="text" value="ea" style="width:100%;font-size:12px;"/>
+    </div>
+    <button class="btn btn-danger btn-xs" style="margin-bottom:1px;" onclick="removePoLineRow(${idx})">✕</button>`;
+  container.appendChild(row);
+  updatePoLineCount();
+  // Focus the description field
+  row.querySelector('.po-line-desc').focus();
+}
+
+function autoFillPoLine(input,idx){
+  const val=input.value;
+  const sku=skus.find(s=>s.desc===val);
+  if(sku){
+    const p=document.getElementById('po-line-price-'+idx);
+    const u=document.getElementById('po-line-unit-'+idx);
+    if(p) p.value=sku.unitPrice;
+    if(u) u.value=sku.unit;
+  }
+}
+
+function removePoLineRow(idx){
+  const row=document.getElementById('po-line-row-'+idx);
+  if(row) row.remove();
+  updatePoLineCount();
+  const container=document.getElementById('po-lines-container');
+  if(container&&!container.querySelector('[id^="po-line-row-"]')){
+    const empty=document.createElement('div');
+    empty.id='po-lines-empty';
+    empty.style.cssText='font-size:12px;color:var(--text3);padding:8px 0;';
+    empty.textContent='No lines added yet — click + Add line';
+    container.appendChild(empty);
+  }
+}
+
+function updatePoLineCount(){
+  const rows=document.querySelectorAll('[id^="po-line-row-"]');
+  const el=document.getElementById('po-line-count');
+  if(el) el.textContent=`(${rows.length})`;
+}
+
 function showAddLine(poId){
   _addPoId=poId;
   const po=pos.find(p=>p.id===poId);
-  const sOpts=skus.map(s=>`<option value="${s.desc}"/>`).join('');
+  // Use escaped options to fix special character bug
+  const sOpts=skus.map(s=>`<option value="${escHtml(s.desc)}"/>`).join('');
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
-      <div class="modal-title">Add line — ${po.customer} / ${po.cpo}</div>
+      <div class="modal-title">Add line — ${escHtml(po.customer)} / ${escHtml(po.cpo)}</div>
       <datalist id="dl-s">${sOpts}</datalist>
       <div class="modal-grid">
         <div class="full"><div class="field-label" style="margin-bottom:4px;">Description *</div>
@@ -1804,7 +1891,8 @@ async function submitFulfillPO(){
 function showAddShipment(poId,lId){showFulfillPO(poId);}
 
 function autoFillSku(val){
-  const sku=skus.find(s=>s.desc===val);
+  // datalist may return HTML-decoded value, match against raw desc
+  const sku=skus.find(s=>s.desc===val||escHtml(s.desc)===val);
   if(sku){
     const u=document.getElementById('m-unit');const p=document.getElementById('m-price');
     if(u)u.value=sku.unit;if(p)p.value=sku.unitPrice;
@@ -1825,9 +1913,32 @@ async function submitAddPO(){
     due:document.getElementById('m-due').value,commitDate:document.getElementById('m-commit').value,
     so,wo,cin7:!!so,fb:!!wo,inherited:document.getElementById('m-inherited').checked,
     notes:document.getElementById('m-notes').value.trim(),lines:[]};
+
+  // Collect inline lines from modal
+  const lineRows=document.querySelectorAll('[id^="po-line-row-"]');
+  const pendingLines=[];
+  lineRows.forEach(row=>{
+    const descEl=row.querySelector('.po-line-desc');
+    const desc=descEl?.value.trim();
+    if(!desc)return;
+    const idx=row.id.replace('po-line-row-','');
+    const qty=parseInt(document.getElementById('po-line-qty-'+idx)?.value)||1;
+    const unitPrice=parseFloat(document.getElementById('po-line-price-'+idx)?.value)||0;
+    const unit=document.getElementById('po-line-unit-'+idx)?.value||'ea';
+    pendingLines.push({id:'L'+(pendingLines.length+1),desc,qty,unit,unitPrice,shipped:[]});
+  });
+  newPO.lines=pendingLines;
+
   try{
-    await dbSavePO(newPO);pos.push(newPO);
+    await dbSavePO(newPO);
+    // Save lines to DB
+    for(let i=0;i<pendingLines.length;i++){
+      await dbSaveLine(newPO.id,pendingLines[i],i);
+    }
+    pos.push(newPO);
     await syncListsFromPos([newPO]);
+    _poLineCount=0;
+    expanded[id]=true;
     closeModal();renderContent();
   }catch(e){alert('Error: '+e.message);if(btn){btn.disabled=false;btn.textContent='Add PO';}}
 }
