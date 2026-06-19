@@ -720,29 +720,108 @@ function skuLaborHours(desc){
 }
 
 function renderLabor(){
-  // ── Projected hours: open line items × BOM hours, bucketed by PO due month
-  const projMap={};
+  const capacity=settings.laborCapacity||0;
+
+  // ── Step 1: Build a flat list of all open work items with their due date and hours
+  // Each item = {hours, dueDate (Date), poId, lineId} so we can schedule them
+  const workItems=[];
   pos.forEach(po=>{
-    if(!po.due)return;
-    const d=new Date(po.due);
-    const mk=d.toISOString().slice(0,7); // YYYY-MM
-    const label=d.toLocaleString('default',{month:'short',year:'numeric'});
-    if(!projMap[mk])projMap[mk]={mk,label,projHrs:0,d};
     po.lines.forEach(l=>{
       const openQty=lineOpenQty(l);
-      projMap[mk].projHrs+=openQty*skuLaborHours(l.desc);
+      if(openQty<=0)return;
+      const hrs=openQty*skuLaborHours(l.desc);
+      if(hrs<=0)return;
+      workItems.push({
+        hours:hrs,
+        due:po.due?new Date(po.due+'T00:00:00'):null, // null = no due date, scheduled last
+        poId:po.id
+      });
     });
   });
 
-  // ── Billable hours: shipped qty × BOM hours, bucketed by actual ship date
+  // Sort by due date ascending; items with no due date go to the end
+  workItems.sort((a,b)=>{
+    if(a.due&&b.due)return a.due-b.due;
+    if(a.due&&!b.due)return -1;
+    if(!a.due&&b.due)return 1;
+    return 0;
+  });
+
+  // ── Step 2: Schedule into months starting from current month, filling each to capacity
+  // Backlog (anything overdue, i.e. due before current month) gets pulled forward first,
+  // then each month's own due work is added, then overflow rolls to next month.
+  const now=new Date();
+  const startMonth=new Date(now.getFullYear(),now.getMonth(),1);
+
+  // Bucket raw demand by month key (YYYY-MM, using LOCAL date parts — fixes UTC shift bug)
+  const mkOf=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const labelOf=d=>d.toLocaleString('default',{month:'short',year:'numeric'});
+
+  let backlogHours=0; // anything due before the current month
+  const dueByMonth={}; // month key -> hours due that month (current month onward)
+
+  workItems.forEach(item=>{
+    if(!item.due){
+      // No due date — treat as backlog to schedule whenever there's room
+      backlogHours+=item.hours;
+      return;
+    }
+    const itemMonth=new Date(item.due.getFullYear(),item.due.getMonth(),1);
+    if(itemMonth<startMonth){
+      backlogHours+=item.hours;
+    } else {
+      const mk=mkOf(itemMonth);
+      dueByMonth[mk]=(dueByMonth[mk]||0)+item.hours;
+    }
+  });
+
+  // ── Step 3: Walk forward month by month, filling capacity with backlog first, then due work
+  // Continue until backlog is exhausted AND all known due months are covered
+  const scheduleMonths=[];
+  let cursor=new Date(startMonth);
+  let remainingBacklog=backlogHours;
+  const maxMonthsToShow=24; // safety cap
+  const lastDueMonth=Object.keys(dueByMonth).length
+    ? Object.keys(dueByMonth).sort().slice(-1)[0]
+    : mkOf(startMonth);
+
+  for(let i=0;i<maxMonthsToShow;i++){
+    const mk=mkOf(cursor);
+    const dueThisMonth=dueByMonth[mk]||0;
+    const capRemaining=capacity>0?capacity:Infinity;
+
+    // Backlog gets priority — pull as much as fits
+    const backlogTaken=Math.min(remainingBacklog,capRemaining);
+    remainingBacklog-=backlogTaken;
+    let capAfterBacklog=capRemaining-backlogTaken;
+
+    // Then this month's own due work — pulled in even if it pushes over capacity
+    // (we show the real total demand, and flag overage)
+    const totalScheduled=backlogTaken+dueThisMonth;
+
+    scheduleMonths.push({
+      mk,label:labelOf(cursor),
+      backlogHrs:backlogTaken,
+      dueHrs:dueThisMonth,
+      totalHrs:totalScheduled,
+      isBacklogCatchup:backlogTaken>0
+    });
+
+    cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);
+
+    // Stop once backlog is cleared and we've passed the last month with known due work
+    if(remainingBacklog<=0&&mk>=lastDueMonth) break;
+  }
+
+  // ── Billable hours: shipped qty × BOM hours, bucketed by actual ship date (LOCAL date, fixed)
   const billMap={};
   pos.forEach(po=>{
     po.lines.forEach(l=>{
       l.shipped.forEach(sh=>{
         if(!sh.date)return;
-        const d=new Date(sh.date);
-        const mk=d.toISOString().slice(0,7);
-        const label=d.toLocaleString('default',{month:'short',year:'numeric'});
+        const d=new Date(sh.date+'T00:00:00');
+        const mk=mkOf(d);
+        const label=labelOf(d);
         if(!billMap[mk])billMap[mk]={mk,label,billHrs:0,d};
         billMap[mk].billHrs+=sh.qty*skuLaborHours(l.desc);
       });
@@ -756,30 +835,27 @@ function renderLabor(){
     actualMap[log.month].totalHrs+=log.hours;
   });
 
-  // ── Merge all months for efficiency table
-  const allMonths=new Set([...Object.keys(projMap),...Object.keys(billMap),...Object.keys(actualMap)]);
+  // ── Merge for efficiency table (uses scheduled proj hours where available)
+  const schedByMk={};
+  scheduleMonths.forEach(m=>schedByMk[m.mk]=m);
+  const allMonths=new Set([...Object.keys(schedByMk),...Object.keys(billMap),...Object.keys(actualMap)]);
   const effRows=[...allMonths].sort().map(mk=>{
-    const proj=projMap[mk]||{projHrs:0,label:mk};
+    const sched=schedByMk[mk];
     const bill=billMap[mk]||{billHrs:0,label:mk};
-    const label=proj.label||bill.label||mk;
+    const label=sched?.label||bill.label||mk;
     const billHrs=bill.billHrs;
     const actualHrs=actualMap[mk]?.totalHrs||0;
     const eff=actualHrs>0?Math.round(billHrs/actualHrs*100):null;
-    return{mk,label,projHrs:proj.projHrs,billHrs,actualHrs,eff};
+    return{mk,label,projHrs:sched?sched.totalHrs:0,billHrs,actualHrs,eff};
   });
 
   // ── Summary metrics
-  const totalProjHrs=Object.values(projMap).reduce((s,m)=>s+m.projHrs,0);
+  const totalProjHrs=workItems.reduce((s,i)=>s+i.hours,0);
   const totalBillHrs=Object.values(billMap).reduce((s,m)=>s+m.billHrs,0);
   const totalActualHrs=laborLogs.reduce((s,l)=>s+l.hours,0);
   const overallEff=totalActualHrs>0?Math.round(totalBillHrs/totalActualHrs*100):null;
-  const capacity=settings.laborCapacity||0;
-
-  // ── Projected months sorted
-  const projMonths=Object.values(projMap).sort((a,b)=>a.d-b.d);
 
   // ── Employee log section for current/recent months
-  const now=new Date();
   const currentMonth=now.toISOString().slice(0,7);
   const prevMonth=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString().slice(0,7);
   const logMonths=[prevMonth,currentMonth];
@@ -803,12 +879,15 @@ function renderLabor(){
     </div>`;
   }).join('')||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No labor data yet — add BOM hours to SKUs and log actual hours below</div>';
 
-  const projRowsHtml=projMonths.map((r,i)=>{
-    const pct=capacity>0?Math.round(r.projHrs/capacity*100):null;
+  const projRowsHtml=scheduleMonths.map((r,i)=>{
+    const pct=capacity>0?Math.round(r.totalHrs/capacity*100):null;
     const cls=pct!==null&&pct>100?' over':pct!==null&&pct>85?' warn':'';
+    const backlogNote=r.backlogHrs>0
+      ?`<span style="color:var(--accent);font-size:10px;"> (${r.backlogHrs.toFixed(1)}h backlog)</span>`
+      :'';
     return`<div class="lt-row${cls}" style="grid-template-columns:1.2fr 80px 80px 100px;">
-      <span>${r.label}</span>
-      <span class="lt-val">${r.projHrs.toFixed(1)}h</span>
+      <span>${r.label}${backlogNote}</span>
+      <span class="lt-val">${r.totalHrs.toFixed(1)}h</span>
       <span class="lt-val">${capacity>0?capacity+'h':'—'}</span>
       <span class="lt-val ${pct!==null&&pct>100?'red':pct!==null&&pct>85?'amber':'green'}">${pct!==null?pct+'%':'—'}</span>
     </div>`;
@@ -835,7 +914,7 @@ function renderLabor(){
 
   document.getElementById('content').innerHTML=`
     <div class="labor-grid">
-      <div class="metric"><div class="metric-label">Total projected hrs (open)</div><div class="metric-value">${totalProjHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">From open orders × BOM</div></div>
+      <div class="metric"><div class="metric-label">Total open hrs (all backlog)</div><div class="metric-value">${totalProjHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">${backlogHours>0?backlogHours.toFixed(1)+'h overdue/backlog':'No overdue backlog'}</div></div>
       <div class="metric"><div class="metric-label">Billable hrs (shipped)</div><div class="metric-value amber">${totalBillHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">Shipped qty × BOM hours</div></div>
       <div class="metric"><div class="metric-label">Actual hrs logged</div><div class="metric-value">${totalActualHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">From employee logs</div></div>
       <div class="metric"><div class="metric-label">Overall efficiency</div><div class="metric-value ${effClass(overallEff)}">${overallEff!==null?overallEff+'%':'—'}</div><div class="metric-sub">Billable ÷ actual</div></div>
@@ -843,9 +922,9 @@ function renderLabor(){
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
       <div class="labor-table">
-        <div class="labor-table-title">Projected hours by month</div>
-        <div class="labor-table-sub">Open orders × BOM hours &nbsp;·&nbsp; capacity: ${capacity>0?capacity+'h/mo':'not set in Settings'}</div>
-        <div class="lt-header" style="grid-template-columns:1.2fr 80px 80px 100px;"><span>Month</span><span class="lt-val">Proj hrs</span><span class="lt-val">Capacity</span><span class="lt-val">% of cap</span></div>
+        <div class="labor-table-title">Capacity-constrained schedule</div>
+        <div class="labor-table-sub">Backlog fills capacity first, starting this month &nbsp;·&nbsp; capacity: ${capacity>0?capacity+'h/mo':'not set in Settings'}</div>
+        <div class="lt-header" style="grid-template-columns:1.2fr 80px 80px 100px;"><span>Month</span><span class="lt-val">Scheduled</span><span class="lt-val">Capacity</span><span class="lt-val">% of cap</span></div>
         ${projRowsHtml}
       </div>
       <div class="labor-table">
