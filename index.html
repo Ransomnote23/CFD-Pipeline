@@ -495,6 +495,7 @@ function setTab(tab,el){
   currentTab=tab;
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
   if(el)el.classList.add('active');
+  document.getElementById('content').innerHTML='';
   renderContent();
 }
 function renderContent(){
@@ -507,34 +508,91 @@ function renderContent(){
 }
 
 // ── Pipeline ───────────────────────────────────────────────────
+// Status helper — 'open' now covers both open and partial
+function poStatusGroup(po){
+  const st=poStatus(po);
+  if(st==='open'||st==='partial') return 'open';
+  return st; // overdue, complete, invoiced
+}
+
+function sortPOs(list){
+  // Sort: overdue first (by due date asc), then open (by due date asc), then complete/invoiced (by due date asc)
+  const order=st=>st==='overdue'?0:st==='open'?1:2;
+  return [...list].sort((a,b)=>{
+    const ga=order(poStatusGroup(a)),gb=order(poStatusGroup(b));
+    if(ga!==gb)return ga-gb;
+    // Within same group sort by due date, nulls last
+    const da=a.due?new Date(a.due):null,db=b.due?new Date(b.due):null;
+    if(da&&db)return da-db;
+    if(da&&!db)return -1;
+    if(!da&&db)return 1;
+    return 0;
+  });
+}
+
+function filteredPOs(){
+  return pos.filter(po=>{
+    if(searchQ&&!(po.customer+po.cpo+po.id+po.so+po.wo+po.lines.map(l=>l.desc).join(' ')).toLowerCase().includes(searchQ)) return false;
+    if(filterStatus){
+      const st=poStatus(po);
+      // 'open' filter catches both open and partial
+      if(filterStatus==='open'&&st!=='open'&&st!=='partial') return false;
+      else if(filterStatus!=='open'&&filterStatus!==st) return false;
+    }
+    if(filterCustomer&&po.customer!==filterCustomer) return false;
+    if(filterInherited==='inherited'&&!po.inherited) return false;
+    if(filterInherited==='new'&&po.inherited) return false;
+    return true;
+  });
+}
+
+function buildPOListHTML(filtered){
+  const sorted=sortPOs(filtered);
+  const overdueList=sorted.filter(p=>isOverdue(p));
+  const openList=sorted.filter(p=>!isOverdue(p)&&(poStatus(p)==='open'||poStatus(p)==='partial'));
+  const doneList=sorted.filter(p=>!isOverdue(p)&&poStatus(p)!=='open'&&poStatus(p)!=='partial');
+  let cards='';
+  if(overdueList.length){
+    cards+=`<div class="section-divider">&#9888; Overdue <span class="divider-badge">${overdueList.length}</span></div>`;
+    cards+=overdueList.map(poCard).join('');
+  }
+  if(openList.length){
+    if(overdueList.length) cards+=`<div class="section-divider" style="margin-top:16px;">Open &amp; in progress</div>`;
+    cards+=openList.map(poCard).join('');
+  }
+  if(doneList.length){
+    if(overdueList.length||openList.length) cards+=`<div class="section-divider" style="margin-top:16px;">Complete &amp; invoiced</div>`;
+    cards+=doneList.map(poCard).join('');
+  }
+  if(!sorted.length) cards=`<div class="empty"><div class="empty-title">No orders match your filters</div></div>`;
+  return cards;
+}
+
 function renderPipeline(){
   const totalVal=pos.reduce((s,p)=>s+poValue(p),0);
   const shipped=pos.reduce((s,p)=>s+poShipped(p),0);
-  // Use invoices table as source of truth for invoiced amount
   const invoiced=invoices.reduce((s,i)=>s+i.amount,0);
   const open=totalVal-invoiced;
   const inherited=pos.filter(p=>p.inherited).length;
   const inheritedOpen=pos.filter(p=>p.inherited&&poStatus(p)!=='invoiced'&&poStatus(p)!=='complete').length;
   const custs=[...new Set(pos.map(p=>p.customer))].sort();
-  const custOpts=custs.map(c=>`<option value="${c}"${filterCustomer===c?' selected':''}>${c}</option>`).join('');
-  const filtered=pos.filter(po=>{
-    return(!searchQ||(po.customer+po.cpo+po.id+po.so+po.wo+po.lines.map(l=>l.desc).join(' ')).toLowerCase().includes(searchQ))
-      &&(!filterStatus||poStatus(po)===filterStatus)
-      &&(!filterCustomer||po.customer===filterCustomer)
-      &&(filterInherited===''||(filterInherited==='inherited'?po.inherited:!po.inherited));
-  });
-  const overduePos=filtered.filter(p=>isOverdue(p));
-  const restPos=filtered.filter(p=>!isOverdue(p));
-  let cards='';
-  if(overduePos.length){
-    cards+=`<div class="section-divider">&#9888; Overdue <span class="divider-badge">${overduePos.length}</span></div>`;
-    cards+=overduePos.map(poCard).join('');
+  const custOpts=custs.map(c=>`<option value="${escHtml(c)}"${filterCustomer===c?' selected':''}>${escHtml(c)}</option>`).join('');
+  const filtered=filteredPOs();
+
+  // If pipeline is already rendered, just update the list and metrics — preserves search focus
+  if(document.getElementById('po-list')){
+    document.getElementById('po-list').innerHTML=buildPOListHTML(filtered);
+    const m=document.querySelector('.metrics');
+    if(m) m.innerHTML=`
+      <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
+      <div class="metric"><div class="metric-label">Shipped (open invoice)</div><div class="metric-value amber">${fmt(shipped)}</div></div>
+      <div class="metric"><div class="metric-label">Invoiced</div><div class="metric-value green">${fmt(invoiced)}</div></div>
+      <div class="metric"><div class="metric-label">Open remaining</div><div class="metric-value">${fmt(open)}</div></div>
+      <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400">of ${inherited}</span></div></div>`;
+    return;
   }
-  if(restPos.length){
-    if(overduePos.length) cards+=`<div class="section-divider" style="margin-top:16px;">Active orders</div>`;
-    cards+=restPos.map(poCard).join('');
-  }
-  if(!filtered.length) cards=`<div class="empty"><div class="empty-title">No orders match your filters</div></div>`;
+
+  // Full render (first load or tab switch)
   document.getElementById('content').innerHTML=`
     <div class="metrics">
       <div class="metric"><div class="metric-label">Total PO value</div><div class="metric-value">${fmt(totalVal)}</div></div>
@@ -544,11 +602,10 @@ function renderPipeline(){
       <div class="metric"><div class="metric-label">Inherited backlog open</div><div class="metric-value${inheritedOpen>0?' amber':' green'}">${inheritedOpen} <span style="font-size:13px;font-weight:400">of ${inherited}</span></div></div>
     </div>
     <div class="toolbar">
-      <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" placeholder="Search customer, PO#, part..." value="${searchQ}" oninput="searchQ=this.value;renderPipeline()"/></div>
+      <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" id="pipeline-search" placeholder="Search customer, PO#, part..." value="${searchQ}" oninput="searchQ=this.value;renderPipeline()"/></div>
       <select onchange="filterStatus=this.value;renderPipeline()">
         <option value="">All statuses</option>
-        <option value="open"${filterStatus==='open'?' selected':''}>Open</option>
-        <option value="partial"${filterStatus==='partial'?' selected':''}>Partial</option>
+        <option value="open"${filterStatus==='open'?' selected':''}>Open (incl. partial)</option>
         <option value="complete"${filterStatus==='complete'?' selected':''}>Complete</option>
         <option value="invoiced"${filterStatus==='invoiced'?' selected':''}>Invoiced</option>
         <option value="overdue"${filterStatus==='overdue'?' selected':''}>Overdue</option>
@@ -564,7 +621,7 @@ function renderPipeline(){
       <button class="btn btn-primary" onclick="showAddPO()">+ New PO</button>
       <button class="btn" onclick="exportCSV()">Export CSV</button>
     </div>
-    <div id="po-list">${cards}</div>`;
+    <div id="po-list">${buildPOListHTML(filtered)}</div>`;
 }
 
 function poTotalHours(po){return po.lines.reduce((s,l)=>s+l.qty*skuLaborHours(l.desc),0);}
