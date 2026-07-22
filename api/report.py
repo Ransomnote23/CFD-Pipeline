@@ -87,9 +87,9 @@ def build_summary(ws, customer, po_meta):
     # Row 1 — title bar
     ws.merge_cells("A1:H1")
     sc(ws,1,1, f"Open Purchase Order Status Report  ·  As of {today_str()}",
-       fnt=font(bold=True,color="FFFFFF",size=11),
-       fil=F_HDR, aln=al_l)
-    ws.row_dimensions[1].height = 24
+       fnt=font(bold=True,color="FFFFFF",size=14),
+       fil=F_HDR, aln=Alignment(horizontal="center",vertical="center"))
+    ws.row_dimensions[1].height = 28
 
     # Row 2 — customer name
     ws.merge_cells("A2:H2")
@@ -172,9 +172,9 @@ def build_detail(ws, customer, po_list, skus_map):
     # Title
     ws.merge_cells("A1:L1")
     sc(ws,1,1, f"{customer} — Open PO Line Item Detail",
-       fnt=font(bold=True,color="FFFFFF",size=11),
-       fil=F_HDR, aln=al_l)
-    ws.row_dimensions[1].height = 24
+       fnt=font(bold=True,color="FFFFFF",size=14),
+       fil=F_HDR, aln=Alignment(horizontal="center",vertical="center"))
+    ws.row_dimensions[1].height = 28
 
     # Subtitle
     ws.merge_cells("A2:L2")
@@ -198,18 +198,19 @@ def build_detail(ws, customer, po_list, skus_map):
     r = 5
     for po in po_list:
         od = is_overdue(po.get("due",""))
+        po_start_row = r  # remember where this PO block starts
 
-        # PO grouping header row — full width merge
+        # PO header row — bold navy or dark crimson, white text
         ws.merge_cells(f"A{r}:L{r}")
         po_lbl = (f"PO# {po['cpo']}    ·    WO# {po.get('wo') or '—'}    ·    "
                   f"Due: {fmt_date(po.get('due'))}    ·    "
                   f"Received: {fmt_date(po.get('rcvd'))}")
+        po_hdr_fill = fill("8B0000") if od else fill("1F3864")  # dark crimson : dark navy
         sc(ws,r,1, po_lbl,
-           fnt=font(bold=True, color="FFFFFF" if od else "1F4E79",
-                    size=9),
-           fil=F_OD_PO if od else F_PO,
+           fnt=font(bold=True, color="FFFFFF", size=10),
+           fil=po_hdr_fill,
            aln=al_l, brd=BORDER_MED)
-        ws.row_dimensions[r].height = 16
+        ws.row_dimensions[r].height = 18
         r += 1
 
         for li, line in enumerate(po.get("lines",[])):
@@ -241,10 +242,31 @@ def build_detail(ws, customer, po_list, skus_map):
             ws.row_dimensions[r].height = 14
             r += 1
 
+        po_end_row = r - 1  # last line row of this PO
+
+        # ── Bold border box around entire PO block (header + all lines) ──────
+        box_color = "8B0000" if od else "1F3864"
+        s_thick = Side(style="medium", color=box_color)
+        s_none  = Side(style=None)
+        for row_i in range(po_start_row, po_end_row + 1):
+            is_top    = (row_i == po_start_row)
+            is_bottom = (row_i == po_end_row)
+            for col_i in range(1, 13):
+                is_left  = (col_i == 1)
+                is_right = (col_i == 12)
+                cell = ws.cell(row=row_i, column=col_i)
+                # Build border: thick on box edges, keep existing thin between cells
+                top_side    = s_thick if is_top    else cell.border.top
+                bottom_side = s_thick if is_bottom else cell.border.bottom
+                left_side   = s_thick if is_left   else cell.border.left
+                right_side  = s_thick if is_right  else cell.border.right
+                cell.border = Border(top=top_side, bottom=bottom_side,
+                                     left=left_side, right=right_side)
+
         # Spacer between POs
         ws.merge_cells(f"A{r}:L{r}")
         sc(ws,r,1,"", fil=F_WHITE)
-        ws.row_dimensions[r].height = 6
+        ws.row_dimensions[r].height = 8
         r += 1
 
     for ci,w in enumerate(DET_WIDTHS,1):
@@ -280,12 +302,11 @@ def build_workbook(data, customer_filter=None):
     wb = Workbook()
     wb.remove(wb.active)
 
+    # Build metadata for all customers first
+    all_meta = {}
     for cust in customers:
         po_list = groups[cust]
-        safe    = cust[:24]
-
-        # Build per-PO summary metadata
-        po_meta=[]
+        po_meta = []
         for po in po_list:
             total=len(po.get("lines",[])); openl=partl=0; openv=0.0
             for l in po.get("lines",[]):
@@ -301,12 +322,19 @@ def build_workbook(data, customer_filter=None):
                 total=total, open_l=openl, part_l=partl, open_v=openv,
                 od=is_overdue(po.get("due",""))
             ))
+        all_meta[cust] = po_meta
 
+    # Pass 1 — all Summary tabs
+    for cust in customers:
+        safe = cust[:24]
         ws_sum = wb.create_sheet(f"{safe[:27]} Sum")
-        build_summary(ws_sum, cust, po_meta)
+        build_summary(ws_sum, cust, all_meta[cust])
 
+    # Pass 2 — all Detail tabs
+    for cust in customers:
+        safe = cust[:24]
         ws_det = wb.create_sheet(f"{safe[:24]} Detail")
-        build_detail(ws_det, cust, po_list, skus_map)
+        build_detail(ws_det, cust, groups[cust], skus_map)
 
     buf = io.BytesIO()
     wb.save(buf)
