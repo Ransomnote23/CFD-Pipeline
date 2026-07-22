@@ -1,7 +1,6 @@
 {
   "functions": {
     "api/report.py": {
-      "runtime": "python3.9",
       "maxDuration": 30
     }
   },
