@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2333;--border:#2a2f42;--border2:#343a52;--text:#e8eaf0;--text2:#8b90a7;--text3:#555b73;--accent:#4f7cff;--accent-dim:#1e2d5a;--green:#22c97a;--green-dim:#0d2e1e;--amber:#f5a623;--amber-dim:#2e2006;--red:#ff4d6a;--red-dim:#2e0d14;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -2250,171 +2249,52 @@ function generateReport(){
   const btn=document.getElementById('rpt-btn');
   const status=document.getElementById('rpt-status');
   if(btn){btn.disabled=true;btn.textContent='Building…';}
-  if(status) status.textContent='Preparing data…';
+  if(status) status.textContent='Sending data to report server…';
 
-  try{
-    const skusMap={};
-    skus.forEach(s=>{skusMap[s.desc]=s.laborHours||0;});
-
-    const today=new Date();
-    const todayStr=today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-
-    // Filter and group POs
-    function hasOpen(po){
-      return po.lines.some(l=>lineOpenQty(l)>0);
+  // Build payload — only what the API needs
+  const payload={
+    customer: custFilter||null,
+    data:{
+      pos: pos.map(po=>({
+        id:po.id, customer:po.customer, cpo:po.cpo,
+        rcvd:po.rcvd, due:po.due, so:po.so, wo:po.wo,
+        lines:po.lines.map(l=>({
+          id:l.id, desc:l.desc, qty:l.qty,
+          unit:l.unit, unitPrice:l.unitPrice,
+          shipped:l.shipped.map(s=>({qty:s.qty,inv:s.inv,date:s.date}))
+        }))
+      })),
+      skus: skus.map(s=>({desc:s.desc,laborHours:s.laborHours||0}))
     }
-    const custGroups={};
-    pos.filter(po=>hasOpen(po)&&(!custFilter||po.customer===custFilter))
-      .forEach(po=>{
-        if(!custGroups[po.customer])custGroups[po.customer]=[];
-        custGroups[po.customer].push(po);
-      });
+  };
 
-    const custNames=Object.keys(custGroups).sort();
-    if(!custNames.length){
-      if(status) status.textContent='No open POs found for the selected customer.';
-      if(btn){btn.disabled=false;btn.textContent='Download report';}
-      return;
-    }
-
-    // Sort POs per customer: overdue first then by due date
-    custNames.forEach(c=>{
-      custGroups[c].sort((a,b)=>{
-        const oa=isOverdue(a)?0:1, ob=isOverdue(b)?0:1;
-        if(oa!==ob)return oa-ob;
-        return (a.due||'9999').localeCompare(b.due||'9999');
-      });
-    });
-
-    if(status) status.textContent=`Building ${custNames.length} customer tab pair(s)…`;
-
-    const wb=XLSX.utils.book_new();
-
-    custNames.forEach(cust=>{
-      const poList=custGroups[cust];
-      const safeName=cust.substring(0,24);
-
-      // ─ build summary sheet ─
-      const sumRows=[];
-      // Title
-      sumRows.push([`Open Purchase Order Status Report  |  As of ${todayStr}`,'','','','','','','']);
-      sumRows.push([cust,'','','','','','','']);
-      sumRows.push(['','','','','','','','']);
-      sumRows.push(['Customer PO#','WO#','Date Received','Due Date','Total Lines','Open Lines','Partial Lines','Open Value']);
-
-      let totalOpen=0, totalPastDue=0;
-      const poMeta=[];
-      poList.forEach(po=>{
-        const total=po.lines.length;
-        let openL=0,partL=0,openV=0;
-        po.lines.forEach(l=>{
-          const oq=lineOpenQty(l);
-          if(oq>0){
-            const st=lineStatus(l);
-            if(st==='partial') partL++;
-            else openL++;
-            openV+=oq*l.unitPrice;
-          }
-        });
-        const od=isOverdue(po);
-        totalOpen+=openV;
-        if(od) totalPastDue+=openV;
-        poMeta.push({cpo:po.cpo,wo:po.wo||'—',rcvd:po.rcvd||'',due:po.due||'',total,openL,partL,openV,od});
-        sumRows.push([po.cpo, po.wo||'—', po.rcvd||'', po.due||'', total, openL, partL, openV]);
-      });
-      sumRows.push(['TOTAL','','','','','','',totalOpen]);
-      sumRows.push(['TOTAL PAST DUE','','','','','','',totalPastDue]);
-      sumRows.push(['','','','','','','','']);
-      sumRows.push(['Status Legend:','','','','','','','']);
-      sumRows.push(['OPEN','— Items not yet shipped','','','','','','']);
-      sumRows.push(['PARTIAL','— Partially shipped','','','','','','']);
-      sumRows.push(['Highlighted row','— Due date has passed','','','','','','']);
-
-      const wsSumName=`${safeName.substring(0,26)} Sum`;
-      const wsSum=XLSX.utils.aoa_to_sheet(sumRows);
-
-      // Column widths summary
-      wsSum['!cols']=[{wch:18},{wch:10},{wch:14},{wch:14},{wch:12},{wch:11},{wch:13},{wch:14}];
-
-      // Merge title rows
-      wsSum['!merges']=[
-        {s:{r:0,c:0},e:{r:0,c:7}},
-        {s:{r:1,c:0},e:{r:1,c:7}},
-      ];
-
-      // Style: mark overdue rows — SheetJS CE doesn't support cell styles directly
-      // We add a note column with OD flag for any consumer, but primarily formatting
-      // is handled by Excel conditional formatting which we set via !styles workaround
-      // For CE SheetJS we'll encode overdue via a comment approach:
-      // Actually we just add the data — formatting requires SheetJS Pro or post-processing
-      // The data is correct and usable; users can apply conditional formatting in Excel
-
-      XLSX.utils.book_append_sheet(wb,wsSum,wsSumName.substring(0,31));
-
-      // ─ build detail sheet ─
-      const detRows=[];
-      detRows.push([`${cust} — Open PO Line Item Detail`,'','','','','','','','','','','']);
-      detRows.push([`Report Date: ${todayStr}    |    Labor Hours = BOM hrs/unit × Open Qty × 1.2 safety factor.    Proj. Delivery Date left blank for manual entry.`,'','','','','','','','','','','']);
-      detRows.push(['','','','','','','','','','','','']);
-      detRows.push(['Customer PO#','WO#','Line','Description','Ordered Qty','Shipped Qty','Open Qty','Status','Proj. Delivery Date ✎','Labor Hours','Due Date','Date Received']);
-
-      poList.forEach(po=>{
-        const od=isOverdue(po);
-        // PO header row
-        detRows.push([
-          `PO# ${po.cpo}    |    WO# ${po.wo||'—'}    |    Due: ${po.due||'—'}    |    Received: ${po.rcvd||'—'}`,
-          '','','','','','','','','','',''
-        ]);
-        po.lines.forEach(l=>{
-          const shippedQty=lineShippedQty(l);
-          const openQty=lineOpenQty(l);
-          const st=lineStatus(l).toUpperCase();
-          const bomHrs=skusMap[l.desc]||0;
-          const laborHrs=bomHrs&&openQty>0?Math.round(bomHrs*openQty*1.2*100)/100:null;
-          detRows.push([
-            po.cpo, po.wo||'—', l.id, l.desc,
-            l.qty, shippedQty, openQty,
-            st,
-            '',           // Proj. Delivery Date — blank for manual entry
-            laborHrs,
-            po.due||'',
-            po.rcvd||''
-          ]);
-        });
-        detRows.push(['','','','','','','','','','','','']); // spacer
-      });
-
-      const wsDetName=`${safeName.substring(0,24)} Detail`;
-      const wsDet=XLSX.utils.aoa_to_sheet(detRows);
-      wsDet['!cols']=[{wch:16},{wch:10},{wch:7},{wch:44},{wch:12},{wch:12},{wch:10},{wch:10},{wch:20},{wch:13},{wch:14},{wch:14}];
-      wsDet['!merges']=[
-        {s:{r:0,c:0},e:{r:0,c:11}},
-        {s:{r:1,c:0},e:{r:1,c:11}},
-      ];
-
-      // PO header merges (find them)
-      let r=4; // 0-indexed row 4 = 5th row
-      poList.forEach(po=>{
-        wsDet['!merges'].push({s:{r,c:0},e:{r,c:11}});
-        r+=po.lines.length+2; // lines + spacer
-      });
-
-      XLSX.utils.book_append_sheet(wb,wsDet,wsDetName.substring(0,31));
-    });
-
-    // Download
+  fetch('/api/report',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  })
+  .then(res=>{
+    if(!res.ok) return res.json().then(e=>{throw new Error(e.error||'Server error');});
+    return res.blob();
+  })
+  .then(blob=>{
+    const d=new Date();
+    const ds=`${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
     const fname=custFilter
-      ?`${custFilter.replace(/[^a-zA-Z0-9]/g,'_')}_Open_PO_Report_${_reportDate()}.xlsx`
-      :`All_Customers_Open_PO_Report_${_reportDate()}.xlsx`;
-
-    XLSX.writeFile(wb,fname);
+      ?`${custFilter.replace(/[^a-zA-Z0-9]/g,'_')}_Open_PO_Report_${ds}.xlsx`
+      :`All_Customers_Open_PO_Report_${ds}.xlsx`;
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=fname; a.click();
+    URL.revokeObjectURL(url);
     if(status) status.textContent=`✓ Downloaded: ${fname}`;
     if(btn){btn.disabled=false;btn.textContent='Download report';}
-  }catch(e){
+  })
+  .catch(e=>{
     console.error(e);
     if(status) status.textContent='Error: '+e.message;
     if(btn){btn.disabled=false;btn.textContent='Download report';}
-  }
+  });
 }
 
 function _reportDate(){
