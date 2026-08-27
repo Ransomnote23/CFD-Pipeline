@@ -1890,7 +1890,7 @@ function showFulfillPO(poId){
       </div>
       <div style="text-align:center;">
         <div class="field-label" style="margin-bottom:3px;">Ship qty</div>
-        <input class="field-input fulfill-qty" type="number" min="0" max="${openQ}" value="${openQ}"
+        <input class="field-input fulfill-qty" type="number" min="0" max="${openQ}" value="0"
           data-line-id="${l.id}" data-unit-price="${l.unitPrice}" data-open="${openQ}"
           oninput="updateFulfillTotal()" style="text-align:center;width:100%;font-size:13px;"/>
       </div>
@@ -1904,7 +1904,7 @@ function showFulfillPO(poId){
     </div>`;
   }).join('');
 
-  const totalOpen=openLines.reduce((s,l)=>s+lineOpenQty(l)*l.unitPrice,0);
+  const totalOpen=0;
 
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal" style="max-width:640px;">
