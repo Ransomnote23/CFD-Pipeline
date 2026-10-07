@@ -180,6 +180,19 @@ select:focus{border-color:var(--accent);}
 .ar-banner{background:var(--red-dim);border:1px solid var(--red);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;}
 .ar-banner-text{font-size:13px;color:var(--red);}
 .ar-banner-amount{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--red);}
+.pur-bucket{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:18px;}
+.pur-bucket-hdr{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);}
+.pur-bucket-title{font-size:13px;font-weight:600;}
+.pur-bucket-sub{font-size:11px;font-family:var(--mono);color:var(--text3);}
+.pur-po-hdr{display:flex;gap:14px;align-items:center;padding:7px 14px;background:rgba(79,124,255,.08);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:12px;}
+.pur-po-hdr.od{background:var(--red-dim);}
+.pur-row{display:grid;grid-template-columns:minmax(0,1fr) 60px 74px 74px 74px 128px minmax(0,1fr);gap:8px;align-items:center;padding:6px 14px;border-bottom:0.5px solid var(--border);font-size:12px;}
+.pur-row:last-child{border-bottom:none;}
+.pur-row.need{background:var(--amber-dim);}
+.pur-row.done{opacity:.7;}
+.pur-colhdr{display:grid;grid-template-columns:minmax(0,1fr) 60px 74px 74px 74px 128px minmax(0,1fr);gap:8px;padding:6px 14px;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em;background:var(--surface2);border-bottom:1px solid var(--border);}
+.pur-chk{display:flex;justify-content:center;}
+.pur-chk input{width:15px;height:15px;cursor:pointer;accent-color:var(--accent);}
 .inv-monthly-table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;}
 .imt-header{display:grid;grid-template-columns:1.2fr 80px 100px 100px 100px 100px;gap:8px;padding:9px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;}
 .imt-row{display:grid;grid-template-columns:1.2fr 80px 100px 100px 100px 100px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--mono);align-items:center;}
@@ -207,6 +220,7 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-item" onclick="setTab('projections',this)"><div class="dot"></div>Projections</div>
       <div class="sidebar-item" onclick="setTab('labor',this)"><div class="dot"></div>Labor</div>
       <div class="sidebar-item" onclick="setTab('invoices',this)"><div class="dot"></div>Invoices</div>
+      <div class="sidebar-item" onclick="setTab('purchasing',this)"><div class="dot"></div>Purchasing</div>
       <div class="sidebar-section">Tools</div>
       <div class="sidebar-item" onclick="showReportModal()"><div class="dot"></div>Open PO Report (.xlsx)</div>
       <div class="sidebar-item" onclick="exportCSV()"><div class="dot"></div>Export pipeline CSV</div>
@@ -232,7 +246,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── App state ──────────────────────────────────────────────────
-let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[];
+let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[];
 let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
 let expanded={},currentTab='pipeline';
 let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
@@ -248,7 +262,7 @@ function setStatus(state,text){
 async function dbLoad(){
   setStatus('loading','Loading...');
   try{
-    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes]=await Promise.all([
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes]=await Promise.all([
       sb.from('pos').select('*').order('created_at'),
       sb.from('line_items').select('*').order('sort_order'),
       sb.from('shipments').select('*').order('created_at'),
@@ -258,6 +272,7 @@ async function dbLoad(){
       sb.from('employees').select('*').order('name'),
       sb.from('labor_logs').select('*').order('month'),
       sb.from('invoices').select('*').order('issue_date',{ascending:false}),
+      sb.from('purchasing').select('*'),
     ]);
     if(posRes.error) throw posRes.error;
 
@@ -293,6 +308,7 @@ async function dbLoad(){
     employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false}));
     laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
     invoices=(invRes.data||[]).map(mapInvoice);
+    purchasing=(purRes.data||[]).map(r=>({poId:r.po_id,lineId:r.line_id,status:r.status||'none',date:r.status_date||'',notes:r.notes||''}));
     if(setRes.data){
       const d=setRes.data;
       settings={companyName:d.company_name,divisionName:d.division_name,preparedBy:d.prepared_by,monthlyTarget:Number(d.monthly_target),laborCapacity:Number(d.labor_capacity)};
@@ -504,6 +520,7 @@ function renderContent(){
   else if(currentTab==='projections')renderProjections();
   else if(currentTab==='labor')renderLabor();
   else if(currentTab==='invoices')renderInvoices();
+  else if(currentTab==='purchasing')renderPurchasing();
   else if(currentTab==='lists')renderLists();
   else if(currentTab==='settings')renderSettings();
 }
@@ -1071,6 +1088,161 @@ async function removeEmployee(id){
     laborLogs=laborLogs.filter(l=>l.employeeId!==id);
     renderLabor();
   }catch(e){alert('Error: '+e.message);}
+}
+
+// ── Purchasing ─────────────────────────────────────────────────
+let purFilter='needs';   // all | needs | partial | done
+let purCustomer='';
+let purSearch='';
+let _purRows=[];         // index -> {po,line} for safe handlers
+
+const PUR_LABELS={none:'Not ordered',partial:'Partially ordered',ordered:'Fully ordered',on_hand:'Parts on hand'};
+
+function getPurch(poId,lineId){
+  return purchasing.find(p=>p.poId===poId&&p.lineId===lineId)||{poId,lineId,status:'none',date:'',notes:''};
+}
+
+async function dbSavePurch(rec){
+  const {error}=await sb.from('purchasing').upsert({
+    po_id:rec.poId,line_id:rec.lineId,status:rec.status,
+    status_date:rec.date||null,notes:rec.notes||'',updated_at:new Date().toISOString()
+  },{onConflict:'po_id,line_id'});
+  if(error)throw error;
+}
+
+function upsertLocalPurch(rec){
+  const i=purchasing.findIndex(p=>p.poId===rec.poId&&p.lineId===rec.lineId);
+  if(i>=0)purchasing[i]=rec;else purchasing.push(rec);
+}
+
+function daysToDue(po){
+  if(!po.due)return null;
+  const t=new Date();t.setHours(0,0,0,0);
+  return Math.round((new Date(po.due+'T00:00:00')-t)/86400000);
+}
+
+function purBucket(days){
+  if(days===null)return 3;
+  if(days<=28)return 0;
+  if(days<=42)return 1;
+  if(days<=56)return 2;
+  return 3;
+}
+
+async function setPurchStatus(idx,status,checked){
+  const row=_purRows[idx];if(!row)return;
+  const cur=getPurch(row.po.id,row.line.id);
+  const rec={...cur,status:checked?status:'none'};
+  if(checked&&!rec.date)rec.date=new Date().toISOString().slice(0,10);
+  try{await dbSavePurch(rec);upsertLocalPurch(rec);renderPurchasing();}
+  catch(e){alert('Save error: '+e.message);}
+}
+
+async function setPurchField(idx,field,val){
+  const row=_purRows[idx];if(!row)return;
+  const rec={...getPurch(row.po.id,row.line.id),[field]:val};
+  try{await dbSavePurch(rec);upsertLocalPurch(rec);}
+  catch(e){alert('Save error: '+e.message);}
+}
+
+function buildPurchListHTML(){
+  _purRows=[];
+  const buckets=[
+    {title:'Due within 4 weeks',sub:'incl. overdue',items:[]},
+    {title:'Due in 4–6 weeks',sub:'',items:[]},
+    {title:'Due in 6–8 weeks',sub:'',items:[]},
+    {title:'Due in 8+ weeks / no due date',sub:'',items:[]},
+  ];
+  const q=purSearch.toLowerCase();
+  const sorted=[...pos].sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
+  sorted.forEach(po=>{
+    if(purCustomer&&po.customer!==purCustomer)return;
+    const openLines=po.lines.filter(l=>{
+      if(lineOpenQty(l)<=0)return false;
+      const st=getPurch(po.id,l.id).status;
+      if(purFilter==='needs'&&st!=='none')return false;
+      if(purFilter==='partial'&&st!=='partial')return false;
+      if(purFilter==='done'&&!(st==='ordered'||st==='on_hand'))return false;
+      if(q&&!(po.customer+' '+po.cpo+' '+(po.wo||'')+' '+l.desc).toLowerCase().includes(q))return false;
+      return true;
+    });
+    if(!openLines.length)return;
+    const d=daysToDue(po);
+    buckets[purBucket(d)].items.push({po,lines:openLines,days:d});
+  });
+
+  return buckets.map(b=>{
+    let totalLines=0,needLines=0;
+    b.items.forEach(it=>it.lines.forEach(l=>{totalLines++;if(getPurch(it.po.id,l.id).status==='none')needLines++;}));
+    const body=b.items.map(it=>{
+      const od=it.days!==null&&it.days<0;
+      const dueTxt=it.days===null?'no due date':od?`${Math.abs(it.days)}d overdue`:`${it.days}d to due`;
+      const rows=it.lines.map(l=>{
+        const idx=_purRows.length;_purRows.push({po:it.po,line:l});
+        const p=getPurch(it.po.id,l.id);
+        const cls=p.status==='none'?' need':(p.status==='ordered'||p.status==='on_hand')?' done':'';
+        const chk=s=>`<div class="pur-chk"><input type="checkbox" ${p.status===s?'checked':''} title="${PUR_LABELS[s]}" onchange="setPurchStatus(${idx},'${s}',this.checked)"/></div>`;
+        return`<div class="pur-row${cls}">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(l.desc)}">${escHtml(l.desc)}</span>
+          <span style="font-family:var(--mono);text-align:right;">${lineOpenQty(l)} ${escHtml(l.unit||'')}</span>
+          ${chk('partial')}${chk('ordered')}${chk('on_hand')}
+          <input class="field-input" type="date" value="${p.date||''}" onchange="setPurchField(${idx},'date',this.value)" style="font-size:11px;"/>
+          <input class="field-input" type="text" value="${escHtml(p.notes||'')}" placeholder="Notes" onchange="setPurchField(${idx},'notes',this.value)" style="font-size:11px;"/>
+        </div>`;
+      }).join('');
+      return`<div class="pur-po-hdr${od?' od':''}">
+          <span style="font-weight:600;">${escHtml(it.po.customer)}</span>
+          <span style="font-family:var(--mono);color:var(--text2);">PO ${escHtml(it.po.cpo)}</span>
+          <span style="font-family:var(--mono);color:var(--text3);">WO ${escHtml(it.po.wo||'—')}</span>
+          <span style="flex:1;"></span>
+          <span style="font-family:var(--mono);color:${od?'var(--red)':'var(--text2)'};">Due ${it.po.due||'—'} · ${dueTxt}</span>
+        </div>${rows}`;
+    }).join('');
+    return`<div class="pur-bucket">
+      <div class="pur-bucket-hdr">
+        <span class="pur-bucket-title">${b.title}${b.sub?` <span style="font-weight:400;color:var(--text3);font-size:11px;">(${b.sub})</span>`:''}</span>
+        <span class="pur-bucket-sub">${totalLines} line${totalLines!==1?'s':''} · <span style="color:${needLines?'var(--amber)':'var(--green)'};">${needLines} not ordered</span></span>
+      </div>
+      ${body?`<div class="pur-colhdr"><span>Line item</span><span style="text-align:right;">Open</span><span style="text-align:center;">Partial</span><span style="text-align:center;">Ordered</span><span style="text-align:center;">On hand</span><span>Date</span><span>Notes</span></div>${body}`
+        :'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">Nothing in this window matches the current filter</div>'}
+    </div>`;
+  }).join('');
+}
+
+function purMetrics(){
+  const counts=[0,0,0,0];
+  pos.forEach(po=>{
+    const b=purBucket(daysToDue(po));
+    po.lines.forEach(l=>{if(lineOpenQty(l)>0&&getPurch(po.id,l.id).status==='none')counts[b]++;});
+  });
+  const card=(label,n,warn)=>`<div class="metric"><div class="metric-label">${label}</div><div class="metric-value${n&&warn?' '+warn:n?'':' green'}">${n}</div><div class="metric-sub">lines not ordered</div></div>`;
+  return card('≤ 4 weeks',counts[0],'red')+card('4–6 weeks',counts[1],'amber')+card('6–8 weeks',counts[2],'amber')+card('8+ weeks',counts[3],'');
+}
+
+function renderPurchasing(){
+  // Partial update keeps search focus and scroll position
+  if(document.getElementById('purch-list')){
+    document.getElementById('purch-list').innerHTML=buildPurchListHTML();
+    const m=document.getElementById('purch-metrics');if(m)m.innerHTML=purMetrics();
+    return;
+  }
+  const custs=[...new Set(pos.map(p=>p.customer))].sort();
+  const custOpts=custs.map(c=>`<option value="${escHtml(c)}"${purCustomer===c?' selected':''}>${escHtml(c)}</option>`).join('');
+  document.getElementById('content').innerHTML=`
+    <div class="labor-grid" id="purch-metrics">${purMetrics()}</div>
+    <div class="toolbar">
+      <div class="search-wrap"><span class="search-icon">&#9906;</span><input type="text" placeholder="Search customer, PO#, WO#, part..." value="${escHtml(purSearch)}" oninput="purSearch=this.value;renderPurchasing()"/></div>
+      <select onchange="purFilter=this.value;renderPurchasing()">
+        <option value="needs"${purFilter==='needs'?' selected':''}>Not ordered yet</option>
+        <option value="partial"${purFilter==='partial'?' selected':''}>Partially ordered</option>
+        <option value="done"${purFilter==='done'?' selected':''}>Fully ordered / on hand</option>
+        <option value="all"${purFilter==='all'?' selected':''}>All open lines</option>
+      </select>
+      <select onchange="purCustomer=this.value;renderPurchasing()">
+        <option value="">All customers</option>${custOpts}
+      </select>
+    </div>
+    <div id="purch-list">${buildPurchListHTML()}</div>`;
 }
 
 // ── Invoices ───────────────────────────────────────────────────
