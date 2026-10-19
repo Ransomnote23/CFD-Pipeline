@@ -219,6 +219,7 @@ select:focus{border-color:var(--accent);}
       <div class="sidebar-item active" onclick="setTab('pipeline',this)"><div class="dot"></div>Pipeline</div>
       <div class="sidebar-item" onclick="setTab('projections',this)"><div class="dot"></div>Projections</div>
       <div class="sidebar-item" onclick="setTab('labor',this)"><div class="dot"></div>Labor</div>
+      <div class="sidebar-item" onclick="setTab('productivity',this)"><div class="dot"></div>Productivity</div>
       <div class="sidebar-item" onclick="setTab('invoices',this)"><div class="dot"></div>Invoices</div>
       <div class="sidebar-item" onclick="setTab('purchasing',this)"><div class="dot"></div>Purchasing</div>
       <div class="sidebar-section">Tools</div>
@@ -246,7 +247,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── App state ──────────────────────────────────────────────────
-let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[];
+let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[],timeOff=[];
 let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
 let expanded={},currentTab='pipeline';
 let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
@@ -262,7 +263,7 @@ function setStatus(state,text){
 async function dbLoad(){
   setStatus('loading','Loading...');
   try{
-    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes]=await Promise.all([
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes,toRes]=await Promise.all([
       sb.from('pos').select('*').order('created_at'),
       sb.from('line_items').select('*').order('sort_order'),
       sb.from('shipments').select('*').order('created_at'),
@@ -273,6 +274,7 @@ async function dbLoad(){
       sb.from('labor_logs').select('*').order('month'),
       sb.from('invoices').select('*').order('issue_date',{ascending:false}),
       sb.from('purchasing').select('*'),
+      sb.from('time_off').select('*').order('start_date'),
     ]);
     if(posRes.error) throw posRes.error;
 
@@ -305,7 +307,8 @@ async function dbLoad(){
 
     customers=(custRes.data||[]).map(c=>({name:c.name}));
     skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price),laborHours:Number(s.labor_hours||0)}));
-    employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false}));
+    employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false,weeklyHours:e.weekly_hours!=null?Number(e.weekly_hours):40,directPct:e.direct_pct!=null?Number(e.direct_pct):100,startDate:e.start_date||'',endDate:e.end_date||''}));
+    timeOff=(toRes.data||[]).map(t=>({id:t.id,employeeId:t.employee_id,startDate:t.start_date,endDate:t.end_date,hours:Number(t.hours),type:t.type||'vacation',notes:t.notes||''}));
     laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
     invoices=(invRes.data||[]).map(mapInvoice);
     purchasing=(purRes.data||[]).map(r=>({poId:r.po_id,lineId:r.line_id,status:r.status||'none',date:r.status_date||'',notes:r.notes||''}));
@@ -360,9 +363,19 @@ async function dbDeleteCustomer(name){const {error}=await sb.from('customers').d
 async function dbSaveSku(sku){const {error}=await sb.from('skus').upsert({description:sku.desc,unit:sku.unit,unit_price:sku.unitPrice,labor_hours:sku.laborHours||0},{onConflict:'description'});if(error)throw error;}
 async function dbDeleteSku(desc){const {error}=await sb.from('skus').delete().eq('description',desc);if(error)throw error;}
 async function dbSaveEmployee(emp){
-  const {data,error}=await sb.from('employees').upsert({id:emp.id||undefined,name:emp.name,role:emp.role||'',active:emp.active!==false},{onConflict:'name'}).select().single();
+  const row={name:emp.name,role:emp.role||'',active:emp.active!==false,
+    weekly_hours:emp.weeklyHours??40,direct_pct:emp.directPct??100,
+    start_date:emp.startDate||null,end_date:emp.endDate||null};
+  const q=emp.id?sb.from('employees').update(row).eq('id',emp.id):sb.from('employees').insert(row);
+  const {data,error}=await q.select().single();
   if(error)throw error;return data;
 }
+async function dbDeleteLog(empId,month){const {error}=await sb.from('labor_logs').delete().eq('employee_id',empId).eq('month',month);if(error)throw error;}
+async function dbSaveTimeOff(t){
+  const {data,error}=await sb.from('time_off').insert({employee_id:t.employeeId,start_date:t.startDate,end_date:t.endDate,hours:t.hours,type:t.type,notes:t.notes||''}).select().single();
+  if(error)throw error;return data;
+}
+async function dbDeleteTimeOff(id){const {error}=await sb.from('time_off').delete().eq('id',id);if(error)throw error;}
 async function dbDeleteEmployee(id){const {error}=await sb.from('employees').delete().eq('id',id);if(error)throw error;}
 async function dbSaveLog(log){
   const {data,error}=await sb.from('labor_logs').upsert({id:log.id||undefined,employee_id:log.employeeId,month:log.month,hours:log.hours,notes:log.notes||''},{onConflict:'employee_id,month'}).select().single();
@@ -519,6 +532,7 @@ function renderContent(){
   if(currentTab==='pipeline')renderPipeline();
   else if(currentTab==='projections')renderProjections();
   else if(currentTab==='labor')renderLabor();
+  else if(currentTab==='productivity')renderProductivity();
   else if(currentTab==='invoices')renderInvoices();
   else if(currentTab==='purchasing')renderPurchasing();
   else if(currentTab==='lists')renderLists();
@@ -990,104 +1004,354 @@ function renderLabor(){
   document.getElementById('content').innerHTML=`
     <div class="labor-grid">
       <div class="metric"><div class="metric-label">Total open hrs (all backlog)</div><div class="metric-value">${totalProjHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">${backlogHours>0?backlogHours.toFixed(1)+'h overdue/backlog':'No overdue backlog'}</div></div>
-      <div class="metric"><div class="metric-label">Billable hrs (shipped)</div><div class="metric-value amber">${totalBillHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">Shipped qty × BOM hours</div></div>
-      <div class="metric"><div class="metric-label">Actual hrs logged</div><div class="metric-value">${totalActualHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">From employee logs</div></div>
-      <div class="metric"><div class="metric-label">Overall efficiency</div><div class="metric-value ${effClass(overallEff)}">${overallEff!==null?overallEff+'%':'—'}</div><div class="metric-sub">Billable ÷ actual</div></div>
+      <div class="metric"><div class="metric-label">Months to clear at capacity</div><div class="metric-value">${capacity>0?(totalProjHrs/capacity).toFixed(1):'—'}</div><div class="metric-sub">at ${capacity||'—'}h/mo</div></div>
+      <div class="metric"><div class="metric-label">Billable hrs (shipped, all time)</div><div class="metric-value amber">${totalBillHrs.toFixed(1)}<span style="font-size:14px;"> h</span></div><div class="metric-sub">Shipped qty × BOM hours</div></div>
+      <div class="metric" style="cursor:pointer;" onclick="setTab('productivity',[...document.querySelectorAll('.sidebar-item')].find(e=>e.textContent.trim()==='Productivity'))"><div class="metric-label">Efficiency &amp; staffing</div><div class="metric-value" style="font-size:15px;color:var(--accent);">Productivity tab →</div><div class="metric-sub">Hours, time off, monthly report</div></div>
+    </div>
+    <div class="labor-table">
+      <div class="labor-table-title">Capacity-constrained schedule</div>
+      <div class="labor-table-sub">Backlog fills capacity first, starting this month &nbsp;·&nbsp; capacity: ${capacity>0?capacity+'h/mo':'not set in Settings'}</div>
+      <div class="lt-header" style="grid-template-columns:1.2fr 80px 80px 100px;"><span>Month</span><span class="lt-val">Scheduled</span><span class="lt-val">Capacity</span><span class="lt-val">% of cap</span></div>
+      ${projRowsHtml}
+    </div>`;
+}
+
+// ── Productivity (staffing hours vs earned hours) ──────────────
+function ymKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function ymdKey(d){return ymKey(d)+'-'+String(d.getDate()).padStart(2,'0');}
+function parseYmd(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
+function addMonths(mk,n){const [y,m]=mk.split('-').map(Number);return ymKey(new Date(y,m-1+n,1));}
+function monthLabel(mk,style){const [y,m]=mk.split('-').map(Number);return new Date(y,m-1,1).toLocaleString('en-US',{month:style||'long',year:'numeric'});}
+
+let prodMonth=(()=>{const d=new Date();return ymKey(new Date(d.getFullYear(),d.getMonth()-1,1));})();
+
+// Company holidays by rule; Sat → observed Fri, Sun → observed Mon
+const _holCache={};
+function holidaysForYear(y){
+  if(_holCache[y])return _holCache[y];
+  const obs=d=>{const w=d.getDay();if(w===6)d.setDate(d.getDate()-1);else if(w===0)d.setDate(d.getDate()+1);return ymdKey(d);};
+  const nth=(m,dow,n)=>{const d=new Date(y,m,1);while(d.getDay()!==dow)d.setDate(d.getDate()+1);d.setDate(d.getDate()+7*(n-1));return ymdKey(d);};
+  const last=(m,dow)=>{const d=new Date(y,m+1,0);while(d.getDay()!==dow)d.setDate(d.getDate()-1);return ymdKey(d);};
+  return _holCache[y]=[
+    {date:obs(new Date(y,0,1)),name:"New Year's Day"},
+    {date:last(4,1),name:'Memorial Day'},
+    {date:obs(new Date(y,6,4)),name:'Independence Day'},
+    {date:nth(8,1,1),name:'Labor Day'},
+    {date:nth(10,4,4),name:'Thanksgiving'},
+    {date:obs(new Date(y,11,25)),name:'Christmas'},
+  ];
+}
+function isHoliday(ds){const y=+ds.slice(0,4);return holidaysForYear(y).some(h=>h.date===ds)||holidaysForYear(y+1).some(h=>h.date===ds);}
+function weekdaysIn(a,b){
+  const out=[];const d=new Date(a);d.setHours(0,0,0,0);const e=new Date(b);e.setHours(0,0,0,0);
+  while(d<=e){const w=d.getDay();if(w>0&&w<6)out.push(ymdKey(d));d.setDate(d.getDate()+1);}
+  return out;
+}
+
+function calDaysIn(a,b){const out=[];const d=new Date(a);const e=new Date(b);while(d<=e){out.push(ymdKey(d));d.setDate(d.getDate()+1);}return out;}
+const TO_TYPES={vacation:'Vacation',sick:'Sick',unpaid:'Unpaid leave',other:'Other time off',overtime:'Overtime / extra'};
+
+function calcMonth(mk){
+  const [y,m]=mk.split('-').map(Number);
+  const ms=new Date(y,m-1,1),me=new Date(y,m,0);
+  const today=new Date();today.setHours(0,0,0,0);
+  const mtd=today>=ms&&today<=me, future=today<ms;
+  const winEnd=mtd?today:me;
+  const msK=ymdKey(ms),weK=ymdKey(winEnd);
+  const emps=[],tot={sched:0,hol:0,off:0,ot:0,worked:0,direct:0};
+  if(!future)employees.forEach(emp=>{
+    const ov=laborLogs.find(l=>l.employeeId===emp.id&&l.month===mk);
+    const st=emp.startDate?parseYmd(emp.startDate):null, en=emp.endDate?parseYmd(emp.endDate):null;
+    const a=st&&st>ms?st:ms, b=en&&en<winEnd?en:winEnd;
+    const inRange=a<=b;
+    if(!ov&&(!inRange||(!emp.active&&!emp.endDate)))return;
+    const daily=(emp.weeklyHours||0)/5;
+    let work=0,hold=0;
+    if(inRange)weekdaysIn(a,b).forEach(ds=>{if(isHoliday(ds))hold++;else work++;});
+    const sched=work*daily,hol=hold*daily;
+    let off=0,ot=0;
+    timeOff.filter(t=>t.employeeId===emp.id).forEach(t=>{
+      // Time off spreads over scheduled workdays; overtime counts any calendar day (weekends included)
+      const all=t.type==='overtime'?calDaysIn(parseYmd(t.startDate),parseYmd(t.endDate||t.startDate))
+        :weekdaysIn(parseYmd(t.startDate),parseYmd(t.endDate||t.startDate)).filter(ds=>!isHoliday(ds));
+      if(!all.length)return;
+      const inM=all.filter(ds=>ds>=msK&&ds<=weK).length;
+      const h=t.hours*inM/all.length;
+      if(t.type==='overtime')ot+=h;else off+=h;
+    });
+    const worked=ov?ov.hours:Math.max(0,sched-off+ot);
+    const pct=emp.directPct??100;
+    const r={emp,sched,hol,off,ot,override:ov?ov.hours:null,worked,pct,direct:worked*pct/100,source:ov?'actual':'calculated'};
+    emps.push(r);['sched','hol','off','ot','worked','direct'].forEach(k=>tot[k]+=r[k]);
+  });
+  let earned=0,shipped=0;const skuMap={};
+  pos.forEach(po=>po.lines.forEach(l=>l.shipped.forEach(sh=>{
+    if(!sh.date||sh.date.slice(0,7)!==mk)return;
+    const h=sh.qty*skuLaborHours(l.desc),v=sh.qty*l.unitPrice;
+    earned+=h;shipped+=v;
+    const s=skuMap[l.desc]||(skuMap[l.desc]={desc:l.desc,qty:0,hrs:0,value:0});
+    s.qty+=sh.qty;s.hrs+=h;s.value+=v;
+  })));
+  const skuList=Object.values(skuMap).sort((a,b)=>b.hrs-a.hrs||b.value-a.value);
+  return{mk,label:monthLabel(mk),short:monthLabel(mk,'short'),mtd,future,emps,tot,earned,shipped,
+    eff:tot.direct>0?earned/tot.direct:null,perHr:tot.direct>0?shipped/tot.direct:null,
+    skus:skuList,noBom:skuList.filter(s=>s.hrs===0)};
+}
+
+function calcSeries(endMk,n){
+  const all=[];for(let i=n+1;i>=0;i--)all.push(calcMonth(addMonths(endMk,-i)));
+  all.forEach((m,i)=>{
+    const w=all.slice(Math.max(0,i-2),i+1);
+    const e=w.reduce((s,x)=>s+x.earned,0),d=w.reduce((s,x)=>s+x.tot.direct,0);
+    m.roll3=d>0?e/d:null;
+  });
+  return all.slice(2);
+}
+
+const _h=v=>v==null?'—':(Math.round(v*10)/10).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
+const _p=v=>v==null?'—':Math.round(v*100)+'%';
+const _effCls=v=>v==null?'':v>=.85?'green':v>=.65?'amber':'red';
+
+function timeOffInMonth(mk){
+  const [y,m]=mk.split('-').map(Number);
+  const s=ymdKey(new Date(y,m-1,1)),e=ymdKey(new Date(y,m,0));
+  return timeOff.filter(t=>t.startDate<=e&&(t.endDate||t.startDate)>=s)
+    .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+}
+
+function renderProductivity(){
+  const series=calcSeries(prodMonth,12);
+  const cur=series[series.length-1],prev=series[series.length-2];
+  const empName=id=>employees.find(e=>e.id===id)?.name||'—';
+
+  const monthOpts=[];
+  for(let i=-1;i<24;i++){const mk=addMonths(ymKey(new Date()),-i);monthOpts.push(`<option value="${mk}"${mk===prodMonth?' selected':''}>${monthLabel(mk)}${i===0?' (in progress)':''}</option>`);}
+
+  const delta=(a,b,fmtFn)=>{
+    if(a==null||b==null)return'<div class="metric-sub">no prior month</div>';
+    const d=a-b;const up=d>=0;
+    return`<div class="metric-sub" style="color:${up?'var(--green)':'var(--red)'};">${up?'▲':'▼'} ${fmtFn(Math.abs(d))} vs ${prev.short}</div>`;
+  };
+  const kpi=`
+    <div class="metric"><div class="metric-label">Direct labor hrs</div><div class="metric-value">${_h(cur.tot.direct)}</div>${delta(cur.tot.direct,prev.tot.direct,_h)}</div>
+    <div class="metric"><div class="metric-label">Earned hrs (shipped × BOM)</div><div class="metric-value amber">${_h(cur.earned)}</div>${delta(cur.earned,prev.earned,_h)}</div>
+    <div class="metric"><div class="metric-label">Efficiency</div><div class="metric-value ${_effCls(cur.eff)}">${_p(cur.eff)}</div>${delta(cur.eff,prev.eff,v=>Math.round(v*100)+' pts')}</div>
+    <div class="metric"><div class="metric-label">3-mo rolling efficiency</div><div class="metric-value ${_effCls(cur.roll3)}">${_p(cur.roll3)}</div><div class="metric-sub">smooths shipment timing</div></div>
+    <div class="metric"><div class="metric-label">Shipped $ / direct hr</div><div class="metric-value">${cur.perHr==null?'—':fmt(cur.perHr)}</div><div class="metric-sub">${fmt(cur.shipped)} shipped</div></div>`;
+
+  const warn=[];
+  if(!employees.length)warn.push('No employees set up yet — add your team in the Team setup section below.');
+  if(cur.mtd)warn.push(`${cur.label} is still in progress — hours are calculated through today.`);
+  if(cur.noBom.length)warn.push(`${cur.noBom.length} SKU${cur.noBom.length>1?'s':''} shipped this month ${cur.noBom.length>1?'have':'has'} no BOM hours, so earned hours are understated: ${cur.noBom.slice(0,4).map(s=>escHtml(s.desc)).join('; ')}${cur.noBom.length>4?'…':''}`);
+  const warnHtml=warn.map(w=>`<div style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);border-radius:6px;padding:8px 12px;font-size:12px;margin-bottom:10px;">${w}</div>`).join('');
+
+  const trendRows=series.map(m=>`<div class="lt-row${m.mk===prodMonth?' total-row':''}" style="grid-template-columns:1fr repeat(7,82px);cursor:pointer;" onclick="prodMonth='${m.mk}';renderProductivity()">
+      <span>${m.short}${m.mtd?' <span style="font-size:10px;color:var(--text3);">MTD</span>':''}</span>
+      <span class="lt-val">${_h(m.tot.worked)}</span><span class="lt-val">${_h(m.tot.off)}</span>
+      <span class="lt-val">${_h(m.tot.direct)}</span><span class="lt-val amber">${_h(m.earned)}</span>
+      <span class="lt-val ${_effCls(m.eff)}">${_p(m.eff)}</span><span class="lt-val ${_effCls(m.roll3)}">${_p(m.roll3)}</span>
+      <span class="lt-val">${m.perHr==null?'—':fmt(m.perHr)}</span></div>`).join('');
+
+  const staffRows=cur.emps.map(r=>`<div class="lt-row" style="grid-template-columns:1.3fr repeat(6,74px) 120px;">
+      <span>${escHtml(r.emp.name)} <span style="color:var(--text3);font-size:11px;">${escHtml(r.emp.role)}</span></span>
+      <span class="lt-val">${_h(r.sched)}</span><span class="lt-val">${_h(r.hol)}</span>
+      <span class="lt-val">${r.off?_h(r.off):'—'}</span><span class="lt-val">${r.ot?'+'+_h(r.ot):'—'}</span>
+      <span class="lt-val">${_h(r.worked)}</span><span class="lt-val">${_h(r.direct)}${r.pct<100?` <span style="font-size:10px;color:var(--text3);">${r.pct}%</span>`:''}</span>
+      <input class="field-input" type="number" step="0.5" min="0" placeholder="${_h(Math.max(0,r.sched-r.off+r.ot))} calc" value="${r.override??''}" title="Actual hours from payroll — overrides the calculated number" onchange="setActualOverride('${r.emp.id}',this.value)" style="font-size:11px;${r.override!=null?'border-color:var(--accent);':''}"/>
+    </div>`).join('')||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No staff counted in this month</div>';
+
+  const toRows=timeOffInMonth(prodMonth).map(t=>`<div class="lt-row" style="grid-template-columns:1fr 1.2fr 70px 1.4fr 50px;">
+      <span>${escHtml(empName(t.employeeId))}</span>
+      <span style="font-family:var(--mono);font-size:11px;">${t.startDate}${t.endDate&&t.endDate!==t.startDate?' → '+t.endDate:''}</span>
+      <span class="lt-val">${t.type==='overtime'?'+':''}${_h(t.hours)}</span>
+      <span style="font-size:11px;color:var(--text2);">${TO_TYPES[t.type]||t.type}${t.notes?' · '+escHtml(t.notes):''}</span>
+      <button class="btn btn-xs btn-danger" onclick="removeTimeOff('${t.id}')">✕</button></div>`).join('')||'<div style="padding:10px 14px;font-size:12px;color:var(--text3);">None this month</div>';
+
+  const empOpts=employees.filter(e=>e.active).map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('');
+  const hols=holidaysForYear(+prodMonth.slice(0,4)).map(h=>`${h.name} ${h.date.slice(5)}`).join(' · ');
+
+  const teamRows=employees.map(e=>`<div class="lt-row" style="grid-template-columns:1.1fr 1fr 70px 70px 120px 120px 80px 60px;">
+      <input class="field-input" value="${escHtml(e.name)}" onchange="updEmp('${e.id}','name',this.value)" style="font-size:12px;"/>
+      <input class="field-input" value="${escHtml(e.role)}" placeholder="Role" onchange="updEmp('${e.id}','role',this.value)" style="font-size:12px;"/>
+      <input class="field-input" type="number" step="0.5" min="0" value="${e.weeklyHours}" onchange="updEmp('${e.id}','weeklyHours',parseFloat(this.value)||0)" style="font-size:12px;text-align:right;"/>
+      <input class="field-input" type="number" step="5" min="0" max="100" value="${e.directPct}" onchange="updEmp('${e.id}','directPct',Math.min(100,Math.max(0,parseFloat(this.value)||0)))" style="font-size:12px;text-align:right;"/>
+      <input class="field-input" type="date" value="${e.startDate||''}" onchange="updEmp('${e.id}','startDate',this.value)" style="font-size:11px;"/>
+      <input class="field-input" type="date" value="${e.endDate||''}" onchange="updEmp('${e.id}','endDate',this.value)" style="font-size:11px;"/>
+      <label class="chk-label" style="justify-content:center;"><input type="checkbox" ${e.active?'checked':''} onchange="updEmp('${e.id}','active',this.checked)"/> active</label>
+      <button class="btn btn-xs btn-danger" onclick="removeEmployee('${e.id}')">✕</button></div>`).join('');
+
+  const hdr=(cols,labels)=>`<div class="lt-header" style="grid-template-columns:${cols};">${labels.map((l,i)=>`<span${i?' class="lt-val"':''}>${l}</span>`).join('')}</div>`;
+
+  document.getElementById('content').innerHTML=`
+    <div class="toolbar">
+      <select onchange="prodMonth=this.value;renderProductivity()" style="min-width:220px;">${monthOpts.join('')}</select>
+      <div style="flex:1;"></div>
+      <button class="btn btn-primary" id="prod-pdf-btn" onclick="downloadProdPDF()">Download PDF report</button>
+      <button class="btn" onclick="exportProdCSV()">Export data (CSV)</button>
+    </div>
+    ${warnHtml}
+    <div class="metrics">${kpi}</div>
+
+    <div class="labor-table">
+      <div class="labor-table-title">12-month trend</div>
+      <div class="labor-table-sub">Click a month to select it &nbsp;·&nbsp; efficiency = earned ÷ direct hrs &nbsp;·&nbsp; <span style="color:var(--green);">≥85% good</span> <span style="color:var(--amber);">65–84% watch</span> <span style="color:var(--red);">&lt;65% review</span></div>
+      ${hdr('1fr repeat(7,82px)',['Month','Worked','Time off','Direct','Earned','Eff','3-mo eff','$ / hr'])}
+      ${trendRows}
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-      <div class="labor-table">
-        <div class="labor-table-title">Capacity-constrained schedule</div>
-        <div class="labor-table-sub">Backlog fills capacity first, starting this month &nbsp;·&nbsp; capacity: ${capacity>0?capacity+'h/mo':'not set in Settings'}</div>
-        <div class="lt-header" style="grid-template-columns:1.2fr 80px 80px 100px;"><span>Month</span><span class="lt-val">Scheduled</span><span class="lt-val">Capacity</span><span class="lt-val">% of cap</span></div>
-        ${projRowsHtml}
-      </div>
-      <div class="labor-table">
-        <div class="labor-table-title">Efficiency by month</div>
-        <div class="labor-table-sub">Billable (shipped×BOM) vs actual logged &nbsp;·&nbsp; <span style="color:var(--green);">≥85% good</span> &nbsp;<span style="color:var(--amber);">65–84% watch</span> &nbsp;<span style="color:var(--red);">&lt;65% review</span></div>
-        <div class="lt-header" style="grid-template-columns:1fr 80px 80px 80px 80px 100px;"><span>Month</span><span class="lt-val">Proj</span><span class="lt-val">Billable</span><span class="lt-val">Actual</span><span class="lt-val">Eff %</span><span></span></div>
-        ${effRowsHtml}
+    <div class="labor-table">
+      <div class="labor-table-title">Staffing — ${cur.label}</div>
+      <div class="labor-table-sub">Calculated from weekly hours, holidays and time off. Type a number in Actual to override with payroll hours.</div>
+      ${hdr('1.3fr repeat(6,74px) 120px',['Employee','Scheduled','Holiday','Time off','Overtime','Worked','Direct','Actual (payroll)'])}
+      ${staffRows}
+    </div>
+
+    <div class="labor-table">
+      <div class="labor-table-title">Time off &amp; overtime — ${cur.label}</div>
+      <div class="labor-table-sub">Only log exceptions. Leave hours blank to use full days at the employee's normal daily hours. Holidays are automatic: ${hols}</div>
+      ${toRows}
+      <div style="display:grid;grid-template-columns:1.2fr 130px 130px 80px 1fr 1.2fr auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid var(--border);">
+        <div><div class="field-label" style="margin-bottom:4px;">Employee</div><select id="to-emp" style="width:100%;">${empOpts}</select></div>
+        <div><div class="field-label" style="margin-bottom:4px;">From</div><input id="to-start" class="field-input" type="date"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">To</div><input id="to-end" class="field-input" type="date"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Hours</div><input id="to-hrs" class="field-input" type="number" step="0.5" min="0" placeholder="auto"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Type</div><select id="to-type" style="width:100%;">${Object.entries(TO_TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="to-notes" class="field-input" type="text" placeholder="Optional"/></div>
+        <button class="btn btn-primary" onclick="addTimeOff()">+ Add</button>
       </div>
     </div>
 
     <div class="labor-table">
-      <div class="labor-table-title">Log actual hours</div>
-      <div class="labor-table-sub">Enter hours worked per employee for previous and current month</div>
-      <div class="log-row" style="border-bottom:0.5px solid var(--border2);">
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Employee</span>
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Role</span>
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Month</span>
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;">Hours</span>
-        <span></span>
+      <div class="labor-table-title">Team setup</div>
+      <div class="labor-table-sub">Set once. Weekly hours drive the schedule; direct % is the share of time spent on product tracked in this app (e.g. 60% for someone who also does purchasing). Use an end date when someone leaves so history stays correct.</div>
+      ${hdr('1.1fr 1fr 70px 70px 120px 120px 80px 60px',['Name','Role','Wk hrs','Direct %','Start date','End date','',''])}
+      ${teamRows}
+      <div style="display:grid;grid-template-columns:1.1fr 1fr 70px 70px 120px auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid var(--border);">
+        <div><div class="field-label" style="margin-bottom:4px;">Name</div><input id="new-emp-name" class="field-input" type="text" placeholder="Employee name"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Role</div><input id="new-emp-role" class="field-input" type="text" placeholder="e.g. Production tech"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Wk hrs</div><input id="new-emp-wk" class="field-input" type="number" value="40"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Direct %</div><input id="new-emp-pct" class="field-input" type="number" value="100"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Start date</div><input id="new-emp-start" class="field-input" type="date"/></div>
+        <button class="btn btn-primary" onclick="addEmployee()">+ Add</button>
       </div>
-      <div style="padding:0 14px;">
-        ${empLogHtml}
-      </div>
-      <div style="padding:12px 14px;border-top:1px solid var(--border);">
-        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Add employee</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
-          <div><div class="field-label" style="margin-bottom:4px;">Name</div><input id="new-emp-name" class="field-input" type="text" placeholder="Employee name"/></div>
-          <div><div class="field-label" style="margin-bottom:4px;">Role</div><input id="new-emp-role" class="field-input" type="text" placeholder="e.g. Production tech"/></div>
-          <button class="btn btn-primary" onclick="addEmployee()">+ Add</button>
-        </div>
-      </div>
-    </div>
-
-    ${employees.length>0?`<div class="labor-table">
-      <div class="labor-table-title">Team</div>
-      <div class="labor-table-sub">Toggle active/inactive — inactive employees are hidden from logging</div>
-      ${employees.map(e=>`<div class="lt-row" style="grid-template-columns:1fr 1fr auto auto;">
-        <span>${e.name}</span>
-        <span style="color:var(--text3);">${e.role}</span>
-        <span class="badge ${e.active?'complete':'invoiced'}">${e.active?'active':'inactive'}</span>
-        <div style="display:flex;gap:6px;">
-          <button class="btn btn-xs" onclick="toggleEmployee('${e.id}',${!e.active})">${e.active?'Deactivate':'Activate'}</button>
-          <button class="btn btn-xs btn-danger" onclick="removeEmployee('${e.id}')">Remove</button>
-        </div>
-      </div>`).join('')}
-    </div>`:''}`;
+    </div>`;
 }
 
-async function saveLogEntry(empId,month,hoursVal,existingId){
-  const hours=parseFloat(hoursVal)||0;
-  const log={id:existingId||undefined,employeeId:empId,month,hours,notes:''};
-  try{
-    const saved=await dbSaveLog(log);
-    const existing=laborLogs.findIndex(l=>l.employeeId===empId&&l.month===month);
-    if(existing>=0) laborLogs[existing]={...log,id:saved.id};
-    else laborLogs.push({...log,id:saved.id});
-  }catch(e){console.error('Log save error',e);}
+async function updEmp(id,field,val){
+  const e=employees.find(x=>x.id===id);if(!e)return;
+  if(field==='name'&&!String(val).trim()){renderProductivity();return;}
+  e[field]=typeof val==='string'?val.trim():val;
+  try{await dbSaveEmployee(e);renderProductivity();}
+  catch(err){alert('Save error: '+err.message);}
 }
 
 async function addEmployee(){
   const name=document.getElementById('new-emp-name')?.value.trim();
-  const role=document.getElementById('new-emp-role')?.value.trim()||'';
   if(!name){alert('Enter a name.');return;}
   if(employees.find(e=>e.name===name)){alert('Employee already exists.');return;}
+  const emp={name,role:document.getElementById('new-emp-role')?.value.trim()||'',active:true,
+    weeklyHours:parseFloat(document.getElementById('new-emp-wk')?.value)||0,
+    directPct:Math.min(100,Math.max(0,parseFloat(document.getElementById('new-emp-pct')?.value)||0)),
+    startDate:document.getElementById('new-emp-start')?.value||'',endDate:''};
   try{
-    const emp={name,role,active:true};
     const saved=await dbSaveEmployee(emp);
-    employees.push({id:saved.id,name,role,active:true});
+    employees.push({...emp,id:saved.id});
     employees.sort((a,b)=>a.name.localeCompare(b.name));
-    renderLabor();
+    renderProductivity();
   }catch(e){alert('Error: '+e.message);}
 }
 
-async function toggleEmployee(id,active){
-  const emp=employees.find(e=>e.id===id);if(!emp)return;
-  emp.active=active;
-  try{await dbSaveEmployee(emp);renderLabor();}
-  catch(e){alert('Error: '+e.message);}
-}
-
 async function removeEmployee(id){
-  if(!confirm('Remove this employee? Their logged hours will also be deleted.'))return;
+  if(!confirm('Delete this employee and all their time off and actual-hours history? To keep history, set an end date or uncheck active instead.'))return;
   try{
     await dbDeleteEmployee(id);
     employees=employees.filter(e=>e.id!==id);
     laborLogs=laborLogs.filter(l=>l.employeeId!==id);
-    renderLabor();
+    timeOff=timeOff.filter(t=>t.employeeId!==id);
+    renderProductivity();
   }catch(e){alert('Error: '+e.message);}
+}
+
+async function setActualOverride(empId,val){
+  const v=String(val).trim();
+  try{
+    if(v===''){
+      await dbDeleteLog(empId,prodMonth);
+      laborLogs=laborLogs.filter(l=>!(l.employeeId===empId&&l.month===prodMonth));
+    }else{
+      const log={employeeId:empId,month:prodMonth,hours:parseFloat(v)||0,notes:'payroll actual'};
+      const saved=await dbSaveLog(log);
+      laborLogs=laborLogs.filter(l=>!(l.employeeId===empId&&l.month===prodMonth));
+      laborLogs.push({...log,id:saved.id});
+    }
+    renderProductivity();
+  }catch(e){alert('Save error: '+e.message);}
+}
+
+async function addTimeOff(){
+  const empId=document.getElementById('to-emp')?.value;
+  const start=document.getElementById('to-start')?.value;
+  const end=document.getElementById('to-end')?.value||start;
+  if(!empId||!start){alert('Pick an employee and a start date.');return;}
+  if(end<start){alert('End date is before start date.');return;}
+  const emp=employees.find(e=>e.id===empId);
+  let hrs=parseFloat(document.getElementById('to-hrs')?.value);
+  const typ=document.getElementById('to-type')?.value||'vacation';
+  if(isNaN(hrs)&&typ==='overtime'){alert('Enter the number of overtime hours.');return;}
+  if(isNaN(hrs)){
+    const days=weekdaysIn(parseYmd(start),parseYmd(end)).filter(ds=>!isHoliday(ds)).length;
+    hrs=days*(emp?.weeklyHours||0)/5;
+  }
+  const t={employeeId:empId,startDate:start,endDate:end,hours:hrs,
+    type:document.getElementById('to-type')?.value||'vacation',
+    notes:document.getElementById('to-notes')?.value.trim()||''};
+  try{const saved=await dbSaveTimeOff(t);timeOff.push({...t,id:saved.id});renderProductivity();}
+  catch(e){alert('Error: '+e.message);}
+}
+
+async function removeTimeOff(id){
+  if(!confirm('Remove this entry?'))return;
+  try{await dbDeleteTimeOff(id);timeOff=timeOff.filter(t=>t.id!==id);renderProductivity();}
+  catch(e){alert('Error: '+e.message);}
+}
+
+function exportProdCSV(){
+  const series=calcSeries(prodMonth,12);
+  const q=s=>`"${String(s??'').replace(/"/g,'""')}"`;
+  const n=v=>v==null?'':Math.round(v*100)/100;
+  const rows=[['record_type','month','employee','role','weekly_hours','direct_pct','scheduled_hrs','holiday_hrs','time_off_hrs','overtime_hrs','hours_source','worked_hrs','direct_hrs','earned_hrs','shipped_value','efficiency','rolling_3mo_efficiency','shipped_value_per_direct_hr','sku','sku_qty_shipped']];
+  series.forEach(m=>{
+    rows.push(['month_total',m.mk,'','','','',n(m.tot.sched),n(m.tot.hol),n(m.tot.off),n(m.tot.ot),m.mtd?'partial_month':'',n(m.tot.worked),n(m.tot.direct),n(m.earned),n(m.shipped),n(m.eff),n(m.roll3),n(m.perHr),'','']);
+    m.emps.forEach(r=>rows.push(['employee',m.mk,q(r.emp.name),q(r.emp.role),r.emp.weeklyHours,r.pct,n(r.sched),n(r.hol),n(r.off),n(r.ot),r.source,n(r.worked),n(r.direct),'','','','','','','']));
+    m.skus.forEach(s=>rows.push(['sku',m.mk,'','','','','','','','','','','',n(s.hrs),n(s.value),'','','',q(s.desc),s.qty]));
+  });
+  timeOff.forEach(t=>rows.push(['time_off',t.startDate.slice(0,7),q(employees.find(e=>e.id===t.employeeId)?.name||''),'','','','','','','','',`${t.startDate} to ${t.endDate}`,'','','','','','',q(TO_TYPES[t.type]+(t.notes?' - '+t.notes:'')),n(t.hours)]));
+  dl(rows.map(r=>r.join(',')).join('\n'),`productivity_data_${addMonths(prodMonth,-11)}_to_${prodMonth}.csv`,'text/csv');
+}
+
+async function downloadProdPDF(){
+  const btn=document.getElementById('prod-pdf-btn');
+  if(btn){btn.disabled=true;btn.textContent='Building PDF…';}
+  try{
+    const series=calcSeries(prodMonth,12);
+    const cur=series[series.length-1],prev=series[series.length-2];
+    const slim=m=>({mk:m.mk,label:m.label,short:m.short,mtd:m.mtd,worked:m.tot.worked,off:m.tot.off,direct:m.tot.direct,
+      earned:m.earned,shipped:m.shipped,eff:m.eff,roll3:m.roll3,perHr:m.perHr});
+    const payload={type:'labor',
+      company:settings.companyName,division:settings.divisionName,preparedBy:settings.preparedBy,
+      generated:new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
+      current:slim(cur),prior:slim(prev),series:series.map(slim),
+      staff:cur.emps.map(r=>({name:r.emp.name,role:r.emp.role,weekly:r.emp.weeklyHours,pct:r.pct,sched:r.sched,hol:r.hol,off:r.off,ot:r.ot,worked:r.worked,direct:r.direct,source:r.source})),
+      skus:cur.skus.slice(0,10).map(s=>({desc:s.desc,qty:s.qty,hrs:s.hrs,value:s.value})),
+      noBom:cur.noBom.map(s=>s.desc),
+      timeOff:timeOffInMonth(prodMonth).map(t=>({name:employees.find(e=>e.id===t.employeeId)?.name||'',start:t.startDate,end:t.endDate,hours:t.hours,type:TO_TYPES[t.type]||t.type,notes:t.notes}))};
+    const res=await fetch('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!res.ok){let msg='Server error';try{msg=(await res.json()).error||msg;}catch(_){}throw new Error(msg);}
+    const blob=await res.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`Labor_Productivity_Report_${prodMonth}.pdf`;a.click();URL.revokeObjectURL(a.href);
+  }catch(e){alert('Report error: '+e.message);}
+  if(btn){btn.disabled=false;btn.textContent='Download PDF report';}
 }
 
 // ── Purchasing ─────────────────────────────────────────────────
