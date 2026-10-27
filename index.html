@@ -308,9 +308,9 @@ async function dbLoad(){
 
     customers=(custRes.data||[]).map(c=>({name:c.name}));
     skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price),laborHours:Number(s.labor_hours||0)}));
-    employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false,weeklyHours:e.weekly_hours!=null?Number(e.weekly_hours):40,directPct:e.direct_pct!=null?Number(e.direct_pct):100,startDate:e.start_date||'',endDate:e.end_date||''}));
+    employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false,weeklyHours:e.weekly_hours!=null?Number(e.weekly_hours):40,directPct:e.direct_pct!=null?Number(e.direct_pct):100,startDate:e.start_date||'',endDate:e.end_date||'',calloutName:e.callout_name||''}));
     outsideHours=(ohRes.data||[]).map(o=>({id:o.id,client:o.client,month:o.month,hours:Number(o.hours),revenue:Number(o.revenue||0),notes:o.notes||''}));
-    timeOff=(toRes.data||[]).map(t=>({id:t.id,employeeId:t.employee_id,startDate:t.start_date,endDate:t.end_date,hours:Number(t.hours),type:t.type||'vacation',notes:t.notes||''}));
+    timeOff=(toRes.data||[]).map(t=>({id:t.id,employeeId:t.employee_id,startDate:t.start_date,endDate:t.end_date,hours:Number(t.hours),type:t.type||'vacation',notes:t.notes||'',sourceId:t.source_id||''}));
     laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
     invoices=(invRes.data||[]).map(mapInvoice);
     purchasing=(purRes.data||[]).map(r=>({poId:r.po_id,lineId:r.line_id,status:r.status||'none',date:r.status_date||'',notes:r.notes||''}));
@@ -367,7 +367,7 @@ async function dbDeleteSku(desc){const {error}=await sb.from('skus').delete().eq
 async function dbSaveEmployee(emp){
   const row={name:emp.name,role:emp.role||'',active:emp.active!==false,
     weekly_hours:emp.weeklyHours??40,direct_pct:emp.directPct??100,
-    start_date:emp.startDate||null,end_date:emp.endDate||null};
+    start_date:emp.startDate||null,end_date:emp.endDate||null,callout_name:emp.calloutName||null};
   const q=emp.id?sb.from('employees').update(row).eq('id',emp.id):sb.from('employees').insert(row);
   const {data,error}=await q.select().single();
   if(error)throw error;return data;
@@ -1185,7 +1185,7 @@ function renderProductivity(){
       <span>${escHtml(empName(t.employeeId))}</span>
       <span style="font-family:var(--mono);font-size:11px;">${t.startDate}${t.endDate&&t.endDate!==t.startDate?' → '+t.endDate:''}</span>
       <span class="lt-val">${t.type==='overtime'?'+':''}${_h(t.hours)}</span>
-      <span style="font-size:11px;color:var(--text2);">${TO_TYPES[t.type]||t.type}${t.notes?' · '+escHtml(t.notes):''}</span>
+      <span style="font-size:11px;color:var(--text2);">${TO_TYPES[t.type]||t.type}${t.notes?' · '+escHtml(t.notes):''}${t.sourceId?' <span class="badge" style="background:var(--accent-dim);color:var(--accent);font-size:9px;">Callout Log</span>':''}</span>
       <button class="btn btn-xs btn-danger" onclick="removeTimeOff('${t.id}')">✕</button></div>`).join('')||'<div style="padding:10px 14px;font-size:12px;color:var(--text3);">None this month</div>';
 
   const empOpts=employees.filter(e=>e.active).map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('');
@@ -1256,7 +1256,12 @@ function renderProductivity(){
 
     <div class="labor-table">
       <div class="labor-table-title">Time off &amp; overtime — ${cur.label}</div>
-      <div class="labor-table-sub">Only log exceptions. Leave hours blank to use full days at the employee's normal daily hours. Holidays are automatic: ${hols}</div>
+      <div class="labor-table-sub">Import each pay period from the Callout Log, or log exceptions by hand. Leave hours blank to use full days at the employee's normal daily hours. Holidays are automatic: ${hols}</div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
+        <button class="btn btn-primary btn-xs" onclick="document.getElementById('callout-file').click()">Import from Callout Log (CSV)</button>
+        <input type="file" id="callout-file" accept=".csv" style="display:none" onchange="importCalloutCSV(event)"/>
+        <span style="font-size:11px;color:var(--text3);">Safe to re-import: days already brought in are updated, not duplicated.</span>
+      </div>
       ${toRows}
       <div style="display:grid;grid-template-columns:1.2fr 130px 130px 80px 1fr 1.2fr auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid var(--border);">
         <div><div class="field-label" style="margin-bottom:4px;">Employee</div><select id="to-emp" style="width:100%;">${empOpts}</select></div>
@@ -1355,6 +1360,159 @@ async function addTimeOff(){
     notes:document.getElementById('to-notes')?.value.trim()||''};
   try{const saved=await dbSaveTimeOff(t);timeOff.push({...t,id:saved.id});renderProductivity();}
   catch(e){alert('Error: '+e.message);}
+}
+
+// ── Callout Log sync ───────────────────────────────────────────
+// Imports the CSV the Callout Log exports per pay period. Each row is one person-day with a stable
+// entry_id, stored as time_off.source_id = 'callout:<entry_id>' so re-imports update instead of duplicate.
+const CALLOUT_TYPES={sick:'sick',vacation:'vacation',unpaid:'unpaid'};
+let _calloutPending=null;
+
+function calloutSkipList(){try{return JSON.parse(localStorage.getItem('calloutSkip')||'[]');}catch(e){return[];}}
+function calloutSkipSave(list){try{localStorage.setItem('calloutSkip',JSON.stringify(list));}catch(e){}}
+
+function matchCalloutName(name){
+  const n=name.trim().toLowerCase();
+  let m=employees.find(e=>(e.calloutName||'').toLowerCase()===n);
+  if(m)return m;
+  m=employees.find(e=>e.name.trim().toLowerCase()===n);
+  if(m)return m;
+  const first=n.split(/\s+/)[0];
+  const byFirst=employees.filter(e=>e.name.trim().toLowerCase().split(/\s+/)[0]===first);
+  return byFirst.length===1?byFirst[0]:null;
+}
+
+function importCalloutCSV(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    e.target.value='';
+    try{
+      const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());
+      const hdrs=parseCSVLine(lines[0]||'').map(h=>h.trim().replace(/^﻿/,'').toLowerCase());
+      const ix=n=>hdrs.indexOf(n);
+      if(['entry_id','date','employee','type','hours'].some(c=>ix(c)<0)){
+        alert('This doesn\'t look like a Callout Log export. Use "Download for Productivity tracker" on the Callout Log\'s Payroll tab.');return;}
+      const rows=[],ranges=new Map();
+      for(let i=1;i<lines.length;i++){
+        const c=parseCSVLine(lines[i]);const g=k=>(ix(k)>=0?(c[ix(k)]||'').trim():'');
+        const ps=g('period_start'),pe=g('period_end');
+        if(/^\d{4}-\d{2}-\d{2}$/.test(ps)&&/^\d{4}-\d{2}-\d{2}$/.test(pe))ranges.set(ps,pe);
+        const type=g('type').toLowerCase();
+        if(!g('entry_id')||!CALLOUT_TYPES[type]||!/^\d{4}-\d{2}-\d{2}$/.test(g('date')))continue;
+        rows.push({entryId:g('entry_id'),date:g('date'),employee:g('employee'),type:CALLOUT_TYPES[type],hours:parseFloat(g('hours'))||0,note:g('note')});
+      }
+      if(!rows.length&&!ranges.size){alert('No time off found in that file.');return;}
+      _calloutPending={rows,ranges:[...ranges.entries()].map(([s,e])=>({start:s,end:e}))};
+      const skip=calloutSkipList().map(s=>s.toLowerCase());
+      const unmatched=[...new Set(rows.map(r=>r.employee))].filter(n=>!matchCalloutName(n)&&!skip.includes(n.toLowerCase()));
+      if(unmatched.length)showCalloutMapping(unmatched);else previewCalloutImport();
+    }catch(err){alert('Import error: '+err.message);}
+  };
+  r.readAsText(file);
+}
+
+function showCalloutMapping(names){
+  const opts=`<option value="">Skip — not tracked here</option>`+employees.map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('');
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-title">Match Callout Log names</div>
+      <div class="modal-note">These names from the Callout Log don't match anyone in Team setup. Pick who each one is. This is remembered, so you only do it once.</div>
+      ${names.map((n,i)=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin-bottom:8px;">
+        <span style="font-weight:600;">${escHtml(n)}</span><select id="cm-${i}" data-name="${escHtml(n)}">${opts}</select></div>`).join('')}
+      <div class="modal-actions">
+        <button class="btn" onclick="_calloutPending=null;closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCalloutMapping(${names.length})">Continue</button>
+      </div>
+    </div></div>`;
+}
+
+async function saveCalloutMapping(n){
+  const skip=calloutSkipList();
+  try{
+    for(let i=0;i<n;i++){
+      const sel=document.getElementById('cm-'+i);const name=sel.dataset.name;
+      if(!sel.value){if(!skip.map(s=>s.toLowerCase()).includes(name.toLowerCase()))skip.push(name);continue;}
+      const emp=employees.find(e=>e.id===sel.value);
+      emp.calloutName=name;await dbSaveEmployee(emp);
+    }
+    calloutSkipSave(skip);
+    previewCalloutImport();
+  }catch(e){alert('Save error: '+e.message);}
+}
+
+function calloutPlan(){
+  const {rows,ranges}=_calloutPending;
+  const want=new Map(),skipped=[];
+  rows.forEach(r=>{
+    const emp=matchCalloutName(r.employee);
+    if(!emp){skipped.push(r);return;}
+    want.set('callout:'+r.entryId,{sourceId:'callout:'+r.entryId,employeeId:emp.id,startDate:r.date,endDate:r.date,hours:r.hours,type:r.type,notes:r.note});
+  });
+  const have=new Map(timeOff.filter(t=>t.sourceId).map(t=>[t.sourceId,t]));
+  const adds=[],updates=[],removes=[];
+  want.forEach((w,k)=>{
+    const h=have.get(k);
+    if(!h)adds.push(w);
+    else if(h.employeeId!==w.employeeId||h.startDate!==w.startDate||h.hours!==w.hours||h.type!==w.type||(h.notes||'')!==(w.notes||''))updates.push({...w,id:h.id});
+  });
+  // Days deleted in the Callout Log: only within the pay periods this file covers
+  timeOff.filter(t=>t.sourceId&&t.sourceId.startsWith('callout:')&&!want.has(t.sourceId)
+    &&ranges.some(p=>t.startDate>=p.start&&t.startDate<=p.end)).forEach(t=>removes.push(t));
+  // Hand-entered time off on the same person-day would double-count
+  const overlaps=[...want.values()].filter(w=>timeOff.some(t=>!t.sourceId&&t.employeeId===w.employeeId&&t.startDate<=w.startDate&&(t.endDate||t.startDate)>=w.startDate&&t.type!=='overtime'));
+  return{adds,updates,removes,skipped,overlaps,total:want.size};
+}
+
+function previewCalloutImport(){
+  const p=calloutPlan();const {ranges}=_calloutPending;
+  const empName=id=>employees.find(e=>e.id===id)?.name||'—';
+  const fmtD=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+  const rangeTxt=ranges.length?ranges.map(r=>`${fmtD(r.start)} – ${fmtD(r.end)}, ${r.end.slice(0,4)}`).join('; '):'all dates in the file';
+  const byPerson={};
+  [...p.adds,...p.updates].forEach(w=>{const k=empName(w.employeeId);(byPerson[k]=byPerson[k]||{sick:0,vacation:0,unpaid:0})[w.type]+=w.hours;});
+  const lines=Object.entries(byPerson).sort().map(([n,t])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:0.5px solid var(--border);"><span>${escHtml(n)}</span><span style="font-family:var(--mono);color:var(--text2);">${['vacation','sick','unpaid'].filter(k=>t[k]).map(k=>`${TO_TYPES[k]} ${_h(t[k])}h`).join(' · ')}</span></div>`).join('');
+  const nothing=!p.adds.length&&!p.updates.length&&!p.removes.length;
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this){_calloutPending=null;closeModal();}">
+    <div class="modal">
+      <div class="modal-title">Import from Callout Log</div>
+      <div class="modal-note">Pay period: <strong>${rangeTxt}</strong><br>
+        ${nothing?'Already up to date — nothing to change.':`<strong>${p.adds.length}</strong> day${p.adds.length!==1?'s':''} to add · <strong>${p.updates.length}</strong> to update · <strong>${p.removes.length}</strong> to remove (deleted in the Callout Log)`}</div>
+      ${lines?`<div style="margin-bottom:12px;">${lines}</div>`:''}
+      ${p.overlaps.length?`<div style="background:var(--amber-dim);color:var(--amber);border-radius:6px;padding:8px 10px;font-size:12px;margin-bottom:10px;">${p.overlaps.length} imported day${p.overlaps.length!==1?'s':''} also ha${p.overlaps.length!==1?'ve':'s'} time off entered by hand here, which double-counts. Delete the hand-entered row${p.overlaps.length!==1?'s':''} (no Callout Log tag) in the Time off list.</div>`:''}
+      ${p.skipped.length?`<div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Skipping ${p.skipped.length} day${p.skipped.length!==1?'s':''} for people not tracked here (${[...new Set(p.skipped.map(s=>escHtml(s.employee)))].join(', ')}).</div>`:''}
+      <div class="modal-actions">
+        <button class="btn" onclick="_calloutPending=null;closeModal()">${nothing?'Close':'Cancel'}</button>
+        ${nothing?'':`<button class="btn btn-primary" id="callout-go" onclick="applyCalloutImport()">Import</button>`}
+      </div>
+    </div></div>`;
+}
+
+async function applyCalloutImport(){
+  const btn=document.getElementById('callout-go');if(btn){btn.disabled=true;btn.textContent='Importing…';}
+  const p=calloutPlan();
+  try{
+    const ups=[...p.adds,...p.updates];
+    if(ups.length){
+      const {data,error}=await sb.from('time_off').upsert(ups.map(w=>({source_id:w.sourceId,employee_id:w.employeeId,start_date:w.startDate,end_date:w.endDate,hours:w.hours,type:w.type,notes:w.notes||''})),{onConflict:'source_id'}).select();
+      if(error)throw error;
+      data.forEach(d=>{
+        const rec={id:d.id,employeeId:d.employee_id,startDate:d.start_date,endDate:d.end_date,hours:Number(d.hours),type:d.type,notes:d.notes||'',sourceId:d.source_id};
+        const i=timeOff.findIndex(t=>t.id===d.id);if(i>=0)timeOff[i]=rec;else timeOff.push(rec);
+      });
+    }
+    if(p.removes.length){
+      const ids=p.removes.map(t=>t.id);
+      const {error}=await sb.from('time_off').delete().in('id',ids);if(error)throw error;
+      timeOff=timeOff.filter(t=>!ids.includes(t.id));
+    }
+    timeOff.sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    _calloutPending=null;closeModal();
+    // Jump to the month the import covers
+    const lastDay=[...ups.map(w=>w.startDate)].sort().pop();
+    if(lastDay)prodMonth=lastDay.slice(0,7);
+    renderProductivity();
+  }catch(e){alert('Import error: '+e.message);if(btn){btn.disabled=false;btn.textContent='Import';}}
 }
 
 async function removeTimeOff(id){
