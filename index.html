@@ -247,7 +247,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── App state ──────────────────────────────────────────────────
-let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[],timeOff=[];
+let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[],timeOff=[],outsideHours=[];
 let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
 let expanded={},currentTab='pipeline';
 let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
@@ -263,7 +263,7 @@ function setStatus(state,text){
 async function dbLoad(){
   setStatus('loading','Loading...');
   try{
-    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes,toRes]=await Promise.all([
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes,toRes,ohRes]=await Promise.all([
       sb.from('pos').select('*').order('created_at'),
       sb.from('line_items').select('*').order('sort_order'),
       sb.from('shipments').select('*').order('created_at'),
@@ -275,6 +275,7 @@ async function dbLoad(){
       sb.from('invoices').select('*').order('issue_date',{ascending:false}),
       sb.from('purchasing').select('*'),
       sb.from('time_off').select('*').order('start_date'),
+      sb.from('outside_hours').select('*').order('month'),
     ]);
     if(posRes.error) throw posRes.error;
 
@@ -308,6 +309,7 @@ async function dbLoad(){
     customers=(custRes.data||[]).map(c=>({name:c.name}));
     skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price),laborHours:Number(s.labor_hours||0)}));
     employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false,weeklyHours:e.weekly_hours!=null?Number(e.weekly_hours):40,directPct:e.direct_pct!=null?Number(e.direct_pct):100,startDate:e.start_date||'',endDate:e.end_date||''}));
+    outsideHours=(ohRes.data||[]).map(o=>({id:o.id,client:o.client,month:o.month,hours:Number(o.hours),revenue:Number(o.revenue||0),notes:o.notes||''}));
     timeOff=(toRes.data||[]).map(t=>({id:t.id,employeeId:t.employee_id,startDate:t.start_date,endDate:t.end_date,hours:Number(t.hours),type:t.type||'vacation',notes:t.notes||''}));
     laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
     invoices=(invRes.data||[]).map(mapInvoice);
@@ -375,6 +377,12 @@ async function dbSaveTimeOff(t){
   const {data,error}=await sb.from('time_off').insert({employee_id:t.employeeId,start_date:t.startDate,end_date:t.endDate,hours:t.hours,type:t.type,notes:t.notes||''}).select().single();
   if(error)throw error;return data;
 }
+async function dbInsertOutside(rows){
+  const {data,error}=await sb.from('outside_hours').insert(rows.map(o=>({client:o.client,month:o.month,hours:o.hours,revenue:o.revenue||0,notes:o.notes||''}))).select();
+  if(error)throw error;return data;
+}
+async function dbUpdateOutside(o){const {error}=await sb.from('outside_hours').update({client:o.client,month:o.month,hours:o.hours,revenue:o.revenue||0,notes:o.notes||''}).eq('id',o.id);if(error)throw error;}
+async function dbDeleteOutside(id){const {error}=await sb.from('outside_hours').delete().eq('id',id);if(error)throw error;}
 async function dbDeleteTimeOff(id){const {error}=await sb.from('time_off').delete().eq('id',id);if(error)throw error;}
 async function dbDeleteEmployee(id){const {error}=await sb.from('employees').delete().eq('id',id);if(error)throw error;}
 async function dbSaveLog(log){
@@ -1093,7 +1101,12 @@ function calcMonth(mk){
     s.qty+=sh.qty;s.hrs+=h;s.value+=v;
   })));
   const skuList=Object.values(skuMap).sort((a,b)=>b.hrs-a.hrs||b.value-a.value);
+  const earnedTracked=earned,shippedTracked=shipped;
+  const outside=outsideHours.filter(o=>o.month===mk).sort((a,b)=>a.client.localeCompare(b.client));
+  const earnedOutside=outside.reduce((s,o)=>s+o.hours,0),revOutside=outside.reduce((s,o)=>s+o.revenue,0);
+  earned+=earnedOutside;shipped+=revOutside;
   return{mk,label:monthLabel(mk),short:monthLabel(mk,'short'),mtd,future,emps,tot,earned,shipped,
+    earnedTracked,shippedTracked,earnedOutside,revOutside,outside,
     eff:tot.direct>0?earned/tot.direct:null,perHr:tot.direct>0?shipped/tot.direct:null,
     skus:skuList,noBom:skuList.filter(s=>s.hrs===0)};
 }
@@ -1134,10 +1147,10 @@ function renderProductivity(){
   };
   const kpi=`
     <div class="metric"><div class="metric-label">Direct labor hrs</div><div class="metric-value">${_h(cur.tot.direct)}</div>${delta(cur.tot.direct,prev.tot.direct,_h)}</div>
-    <div class="metric"><div class="metric-label">Earned hrs (shipped × BOM)</div><div class="metric-value amber">${_h(cur.earned)}</div>${delta(cur.earned,prev.earned,_h)}</div>
+    <div class="metric"><div class="metric-label">Earned hrs</div><div class="metric-value amber">${_h(cur.earned)}</div>${delta(cur.earned,prev.earned,_h)}${cur.earnedOutside?`<div class="metric-sub">incl. ${_h(cur.earnedOutside)}h outside clients</div>`:''}</div>
     <div class="metric"><div class="metric-label">Efficiency</div><div class="metric-value ${_effCls(cur.eff)}">${_p(cur.eff)}</div>${delta(cur.eff,prev.eff,v=>Math.round(v*100)+' pts')}</div>
     <div class="metric"><div class="metric-label">3-mo rolling efficiency</div><div class="metric-value ${_effCls(cur.roll3)}">${_p(cur.roll3)}</div><div class="metric-sub">smooths shipment timing</div></div>
-    <div class="metric"><div class="metric-label">Shipped $ / direct hr</div><div class="metric-value">${cur.perHr==null?'—':fmt(cur.perHr)}</div><div class="metric-sub">${fmt(cur.shipped)} shipped</div></div>`;
+    <div class="metric"><div class="metric-label">Billed $ / direct hr</div><div class="metric-value">${cur.perHr==null?'—':fmt(cur.perHr)}</div><div class="metric-sub">${fmt(cur.shipped)} billed</div></div>`;
 
   const warn=[];
   if(!employees.length)warn.push('No employees set up yet — add your team in the Team setup section below.');
@@ -1145,10 +1158,10 @@ function renderProductivity(){
   if(cur.noBom.length)warn.push(`${cur.noBom.length} SKU${cur.noBom.length>1?'s':''} shipped this month ${cur.noBom.length>1?'have':'has'} no BOM hours, so earned hours are understated: ${cur.noBom.slice(0,4).map(s=>escHtml(s.desc)).join('; ')}${cur.noBom.length>4?'…':''}`);
   const warnHtml=warn.map(w=>`<div style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);border-radius:6px;padding:8px 12px;font-size:12px;margin-bottom:10px;">${w}</div>`).join('');
 
-  const trendRows=series.map(m=>`<div class="lt-row${m.mk===prodMonth?' total-row':''}" style="grid-template-columns:1fr repeat(7,82px);cursor:pointer;" onclick="prodMonth='${m.mk}';renderProductivity()">
+  const trendRows=series.map(m=>`<div class="lt-row${m.mk===prodMonth?' total-row':''}" style="grid-template-columns:1fr repeat(8,78px);cursor:pointer;" onclick="prodMonth='${m.mk}';renderProductivity()">
       <span>${m.short}${m.mtd?' <span style="font-size:10px;color:var(--text3);">MTD</span>':''}</span>
       <span class="lt-val">${_h(m.tot.worked)}</span><span class="lt-val">${_h(m.tot.off)}</span>
-      <span class="lt-val">${_h(m.tot.direct)}</span><span class="lt-val amber">${_h(m.earned)}</span>
+      <span class="lt-val">${_h(m.tot.direct)}</span><span class="lt-val" style="color:var(--text3);">${m.earnedOutside?_h(m.earnedOutside):'—'}</span><span class="lt-val amber">${_h(m.earned)}</span>
       <span class="lt-val ${_effCls(m.eff)}">${_p(m.eff)}</span><span class="lt-val ${_effCls(m.roll3)}">${_p(m.roll3)}</span>
       <span class="lt-val">${m.perHr==null?'—':fmt(m.perHr)}</span></div>`).join('');
 
@@ -1160,6 +1173,14 @@ function renderProductivity(){
       <input class="field-input" type="number" step="0.5" min="0" placeholder="${_h(Math.max(0,r.sched-r.off+r.ot))} calc" value="${r.override??''}" title="Actual hours from payroll — overrides the calculated number" onchange="setActualOverride('${r.emp.id}',this.value)" style="font-size:11px;${r.override!=null?'border-color:var(--accent);':''}"/>
     </div>`).join('')||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No staff counted in this month</div>';
 
+  const outsideRows=cur.outside.map(o=>`<div class="lt-row" style="grid-template-columns:1.4fr 90px 110px 1.3fr 50px;">
+      <span>${escHtml(o.client)}</span>
+      <input class="field-input" type="number" step="0.5" min="0" value="${o.hours}" onchange="updOutside('${o.id}','hours',parseFloat(this.value)||0)" style="font-size:12px;text-align:right;" title="Earned hours"/>
+      <input class="field-input" type="number" step="0.01" min="0" value="${o.revenue||''}" placeholder="$" onchange="updOutside('${o.id}','revenue',parseFloat(this.value)||0)" style="font-size:12px;text-align:right;" title="Billed $"/>
+      <input class="field-input" type="text" value="${escHtml(o.notes)}" placeholder="Notes" onchange="updOutside('${o.id}','notes',this.value)" style="font-size:12px;"/>
+      <button class="btn btn-xs btn-danger" onclick="removeOutside('${o.id}')">✕</button></div>`).join('')||'<div style="padding:10px 14px;font-size:12px;color:var(--text3);">None entered for this month</div>';
+  const ohClients=[...new Set(outsideHours.map(o=>o.client))].sort().map(c=>`<option value="${escHtml(c)}"/>`).join('');
+  const ohMonthOpts=Array.from({length:37},(_,i)=>addMonths(ymKey(new Date()),1-i)).map(mk=>`<option value="${mk}"${mk===prodMonth?' selected':''}>${monthLabel(mk)}</option>`).join('');
   const toRows=timeOffInMonth(prodMonth).map(t=>`<div class="lt-row" style="grid-template-columns:1fr 1.2fr 70px 1.4fr 50px;">
       <span>${escHtml(empName(t.employeeId))}</span>
       <span style="font-family:var(--mono);font-size:11px;">${t.startDate}${t.endDate&&t.endDate!==t.startDate?' → '+t.endDate:''}</span>
@@ -1200,8 +1221,8 @@ function renderProductivity(){
 
     <div class="labor-table">
       <div class="labor-table-title">12-month trend</div>
-      <div class="labor-table-sub">Click a month to select it &nbsp;·&nbsp; efficiency = earned ÷ direct hrs &nbsp;·&nbsp; <span style="color:var(--green);">≥85% good</span> <span style="color:var(--amber);">65–84% watch</span> <span style="color:var(--red);">&lt;65% review</span></div>
-      ${hdr('1fr repeat(7,82px)',['Month','Worked','Time off','Direct','Earned','Eff','3-mo eff','$ / hr'])}
+      <div class="labor-table-sub">Click a month to select it &nbsp;·&nbsp; earned = tracker shipments + outside clients &nbsp;·&nbsp; efficiency = earned ÷ direct hrs &nbsp;·&nbsp; <span style="color:var(--green);">≥85% good</span> <span style="color:var(--amber);">65–84% watch</span> <span style="color:var(--red);">&lt;65% review</span></div>
+      ${hdr('1fr repeat(8,78px)',['Month','Worked','Time off','Direct','Outside','Earned','Eff','3-mo eff','$ / hr'])}
       ${trendRows}
     </div>
 
@@ -1210,6 +1231,27 @@ function renderProductivity(){
       <div class="labor-table-sub">Calculated from weekly hours, holidays and time off. Type a number in Actual to override with payroll hours.</div>
       ${hdr('1.3fr repeat(6,74px) 120px',['Employee','Scheduled','Holiday','Time off','Overtime','Worked','Direct','Actual (payroll)'])}
       ${staffRows}
+    </div>
+
+    <div class="labor-table">
+      <div class="labor-table-title">Outside clients — ${cur.label}</div>
+      <div class="labor-table-sub">Earned hours billed to clients not tracked in this app. Counted in earned hours and efficiency, and shown separately on the report.${cur.outside.length?` Total ${_h(cur.earnedOutside)}h${cur.revOutside?' · '+fmt(cur.revOutside):''}.`:''}</div>
+      ${outsideRows}
+      <datalist id="dl-oh-client">${ohClients}</datalist>
+      <div style="display:grid;grid-template-columns:1.4fr 150px 90px 110px 1.3fr auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid var(--border);">
+        <div><div class="field-label" style="margin-bottom:4px;">Client</div><input id="oh-client" class="field-input" type="text" list="dl-oh-client" placeholder="Type or pick"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Month</div><select id="oh-month" style="width:100%;">${ohMonthOpts}</select></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Earned hrs</div><input id="oh-hours" class="field-input" type="number" step="0.5" min="0"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Billed $ (opt.)</div><input id="oh-rev" class="field-input" type="number" step="0.01" min="0"/></div>
+        <div><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="oh-notes" class="field-input" type="text" placeholder="Optional"/></div>
+        <button class="btn btn-primary" onclick="addOutside()">+ Add</button>
+      </div>
+      <div style="display:flex;gap:8px;padding:0 14px 12px;align-items:center;">
+        <button class="btn btn-xs" onclick="document.getElementById('oh-file').click()">Import history (CSV)</button>
+        <button class="btn btn-xs" onclick="downloadOutsideTemplate()">CSV template</button>
+        <input type="file" id="oh-file" accept=".csv" style="display:none" onchange="importOutsideCSV(event)"/>
+        <span style="font-size:11px;color:var(--text3);">Columns: client, month (YYYY-MM), hours, revenue, notes</span>
+      </div>
     </div>
 
     <div class="labor-table">
@@ -1321,17 +1363,83 @@ async function removeTimeOff(id){
   catch(e){alert('Error: '+e.message);}
 }
 
+async function addOutside(){
+  const client=document.getElementById('oh-client')?.value.trim();
+  const month=document.getElementById('oh-month')?.value;
+  const hours=parseFloat(document.getElementById('oh-hours')?.value);
+  if(!client||!month||isNaN(hours)){alert('Client, month and hours are required.');return;}
+  const o={client,month,hours,revenue:parseFloat(document.getElementById('oh-rev')?.value)||0,notes:document.getElementById('oh-notes')?.value.trim()||''};
+  try{const [saved]=await dbInsertOutside([o]);outsideHours.push({...o,id:saved.id});renderProductivity();}
+  catch(e){alert('Error: '+e.message);}
+}
+async function updOutside(id,field,val){
+  const o=outsideHours.find(x=>x.id===id);if(!o)return;
+  o[field]=typeof val==='string'?val.trim():val;
+  try{await dbUpdateOutside(o);renderProductivity();}catch(e){alert('Save error: '+e.message);}
+}
+async function removeOutside(id){
+  if(!confirm('Remove this entry?'))return;
+  try{await dbDeleteOutside(id);outsideHours=outsideHours.filter(o=>o.id!==id);renderProductivity();}
+  catch(e){alert('Error: '+e.message);}
+}
+function downloadOutsideTemplate(){
+  dl(['client,month,hours,revenue,notes','Example Client A,2026-01,42.5,3150.00,','Example Client A,2026-02,38,2850.00,','Example Client B,2025-11,12,,estimate from invoices'].join('\n'),'outside_clients_template.csv','text/csv');
+}
+function normMonth(s){
+  s=String(s||'').trim();let m;
+  if((m=s.match(/^(\d{4})-(\d{1,2})(-\d{1,2})?$/)))return m[1]+'-'+m[2].padStart(2,'0');
+  if((m=s.match(/^(\d{1,2})\/(\d{1,2}\/)?(\d{4})$/)))return m[3]+'-'+m[1].padStart(2,'0');
+  const d=new Date(s);return isNaN(d)?null:ymKey(d);
+}
+function importOutsideCSV(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    try{
+      const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());
+      const hdrs=parseCSVLine(lines[0]).map(h=>h.trim().replace(/^﻿/,'').toLowerCase());
+      const ix=n=>hdrs.indexOf(n);
+      if(ix('client')<0||ix('month')<0||ix('hours')<0){alert('CSV needs client, month and hours columns. Download the template for the format.');return;}
+      const ok=[],bad=[];
+      for(let i=1;i<lines.length;i++){
+        const c=parseCSVLine(lines[i]);
+        const client=(c[ix('client')]||'').trim(),month=normMonth(c[ix('month')]);
+        const hours=parseFloat(String(c[ix('hours')]||'').replace(/,/g,''));
+        if(!client||!month||isNaN(hours)){bad.push(i+1);continue;}
+        ok.push({client,month,hours,
+          revenue:ix('revenue')>=0?(parseFloat(String(c[ix('revenue')]||'').replace(/[$,]/g,''))||0):0,
+          notes:ix('notes')>=0?(c[ix('notes')]||'').trim():''});
+      }
+      const exists=new Set(outsideHours.map(o=>o.client.toLowerCase()+'|'+o.month));
+      const toAdd=ok.filter(o=>!exists.has(o.client.toLowerCase()+'|'+o.month));
+      const dupes=ok.length-toAdd.length;
+      if(!toAdd.length){alert(`Nothing new to import.${dupes?` ${dupes} row(s) match a client + month already entered.`:''}${bad.length?` Unreadable rows: ${bad.join(', ')}.`:''}`);return;}
+      const hrs=toAdd.reduce((s,o)=>s+o.hours,0);
+      let msg=`Import ${toAdd.length} entries (${_h(hrs)} earned hours) for ${new Set(toAdd.map(o=>o.client)).size} client(s)?`;
+      if(dupes)msg+=`\n\nSkipping ${dupes} row(s) whose client + month is already entered — edit those on screen instead.`;
+      if(bad.length)msg+=`\n\nSkipping unreadable row(s): ${bad.join(', ')}.`;
+      if(!confirm(msg))return;
+      const saved=await dbInsertOutside(toAdd);
+      saved.forEach(s=>outsideHours.push({id:s.id,client:s.client,month:s.month,hours:Number(s.hours),revenue:Number(s.revenue||0),notes:s.notes||''}));
+      renderProductivity();
+    }catch(err){alert('Import error: '+err.message);}
+    finally{e.target.value='';}
+  };
+  r.readAsText(file);
+}
+
 function exportProdCSV(){
   const series=calcSeries(prodMonth,12);
   const q=s=>`"${String(s??'').replace(/"/g,'""')}"`;
   const n=v=>v==null?'':Math.round(v*100)/100;
-  const rows=[['record_type','month','employee','role','weekly_hours','direct_pct','scheduled_hrs','holiday_hrs','time_off_hrs','overtime_hrs','hours_source','worked_hrs','direct_hrs','earned_hrs','shipped_value','efficiency','rolling_3mo_efficiency','shipped_value_per_direct_hr','sku','sku_qty_shipped']];
+  const rows=[['record_type','month','employee','role','weekly_hours','direct_pct','scheduled_hrs','holiday_hrs','time_off_hrs','overtime_hrs','hours_source','worked_hrs','direct_hrs','earned_hrs','shipped_value','efficiency','rolling_3mo_efficiency','shipped_value_per_direct_hr','sku','sku_qty_shipped','earned_hrs_tracker','earned_hrs_outside','outside_client']];
   series.forEach(m=>{
-    rows.push(['month_total',m.mk,'','','','',n(m.tot.sched),n(m.tot.hol),n(m.tot.off),n(m.tot.ot),m.mtd?'partial_month':'',n(m.tot.worked),n(m.tot.direct),n(m.earned),n(m.shipped),n(m.eff),n(m.roll3),n(m.perHr),'','']);
-    m.emps.forEach(r=>rows.push(['employee',m.mk,q(r.emp.name),q(r.emp.role),r.emp.weeklyHours,r.pct,n(r.sched),n(r.hol),n(r.off),n(r.ot),r.source,n(r.worked),n(r.direct),'','','','','','','']));
-    m.skus.forEach(s=>rows.push(['sku',m.mk,'','','','','','','','','','','',n(s.hrs),n(s.value),'','','',q(s.desc),s.qty]));
+    rows.push(['month_total',m.mk,'','','','',n(m.tot.sched),n(m.tot.hol),n(m.tot.off),n(m.tot.ot),m.mtd?'partial_month':'',n(m.tot.worked),n(m.tot.direct),n(m.earned),n(m.shipped),n(m.eff),n(m.roll3),n(m.perHr),'','',n(m.earnedTracked),n(m.earnedOutside),'']);
+    m.outside.forEach(o=>rows.push(['outside_client',m.mk,'','','','','','','','','','','',n(o.hours),n(o.revenue),'','','',q(o.notes),'','',n(o.hours),q(o.client)]));
+    m.emps.forEach(r=>rows.push(['employee',m.mk,q(r.emp.name),q(r.emp.role),r.emp.weeklyHours,r.pct,n(r.sched),n(r.hol),n(r.off),n(r.ot),r.source,n(r.worked),n(r.direct),'','','','','','','','','','']));
+    m.skus.forEach(s=>rows.push(['sku',m.mk,'','','','','','','','','','','',n(s.hrs),n(s.value),'','','',q(s.desc),s.qty,n(s.hrs),'','']));
   });
-  timeOff.forEach(t=>rows.push(['time_off',t.startDate.slice(0,7),q(employees.find(e=>e.id===t.employeeId)?.name||''),'','','','','','','','',`${t.startDate} to ${t.endDate}`,'','','','','','',q(TO_TYPES[t.type]+(t.notes?' - '+t.notes:'')),n(t.hours)]));
+  timeOff.forEach(t=>rows.push(['time_off',t.startDate.slice(0,7),q(employees.find(e=>e.id===t.employeeId)?.name||''),'','','','','','','','',`${t.startDate} to ${t.endDate}`,'','','','','','',q(TO_TYPES[t.type]+(t.notes?' - '+t.notes:'')),n(t.hours),'','','']));
   dl(rows.map(r=>r.join(',')).join('\n'),`productivity_data_${addMonths(prodMonth,-11)}_to_${prodMonth}.csv`,'text/csv');
 }
 
@@ -1342,7 +1450,8 @@ async function downloadProdPDF(){
     const series=calcSeries(prodMonth,12);
     const cur=series[series.length-1],prev=series[series.length-2];
     const slim=m=>({mk:m.mk,label:m.label,short:m.short,mtd:m.mtd,worked:m.tot.worked,off:m.tot.off,direct:m.tot.direct,
-      earned:m.earned,shipped:m.shipped,eff:m.eff,roll3:m.roll3,perHr:m.perHr});
+      earned:m.earned,shipped:m.shipped,eff:m.eff,roll3:m.roll3,perHr:m.perHr,
+      earnedTracked:m.earnedTracked,earnedOutside:m.earnedOutside,revOutside:m.revOutside});
     const payload={type:'labor',
       company:settings.companyName,division:settings.divisionName,preparedBy:settings.preparedBy,
       generated:new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
@@ -1350,6 +1459,7 @@ async function downloadProdPDF(){
       staff:cur.emps.map(r=>({name:r.emp.name,role:r.emp.role,weekly:r.emp.weeklyHours,pct:r.pct,sched:r.sched,hol:r.hol,off:r.off,ot:r.ot,worked:r.worked,direct:r.direct,source:r.source})),
       skus:cur.skus.slice(0,10).map(s=>({desc:s.desc,qty:s.qty,hrs:s.hrs,value:s.value})),
       noBom:cur.noBom.map(s=>s.desc),
+      outside:cur.outside.map(o=>({client:o.client,hours:o.hours,revenue:o.revenue,notes:o.notes})),
       timeOff:timeOffInMonth(prodMonth).map(t=>({name:employees.find(e=>e.id===t.employeeId)?.name||'',start:t.startDate,end:t.endDate,hours:t.hours,type:TO_TYPES[t.type]||t.type,notes:t.notes}))};
     const res=await fetch('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok){let msg='Server error';try{msg=(await res.json()).error||msg;}catch(_){}throw new Error(msg);}

@@ -517,10 +517,11 @@ def build_labor_pdf(p):
 
     tiles = [
         tile("Direct labor hours", h(cur["direct"]), delta(cur["direct"], prv.get("direct"), "h")),
-        tile("Earned hours", h(cur["earned"]), delta(cur["earned"], prv.get("earned"), "h")),
+        tile("Earned hours", h(cur["earned"]), delta(cur["earned"], prv.get("earned"), "h")
+             + (f"<br/>incl. {h(cur.get('earnedOutside'))} h outside clients" if cur.get("earnedOutside") else "")),
         tile("Efficiency", pct(cur["eff"]), delta(cur["eff"], prv.get("eff"), "pct"), eff_color(cur["eff"])),
         tile("3-month rolling eff.", pct(cur["roll3"]), "smooths shipment timing", eff_color(cur["roll3"])),
-        tile("Shipped $ / direct hr", money(cur["perHr"]), f"{money(cur['shipped'])} shipped"),
+        tile("Billed $ / direct hr", money(cur["perHr"]), f"{money(cur['shipped'])} billed"),
     ]
     tw = W / 5
     kt = Table([[t for t in tiles]], colWidths=[tw] * 5)
@@ -538,19 +539,22 @@ def build_labor_pdf(p):
 
     # ── 12-month trend
     story += [Paragraph("12-month trend", S["h2"]), trend_chart(p["series"], W)]
-    rows = [["Month", "Worked hrs", "Time off", "Direct hrs", "Earned hrs", "Efficiency", "3-mo eff.", "Shipped $", "$ / direct hr"]]
+    rows = [["Month", "Worked\nhrs", "Time\noff", "Direct\nhrs", "Earned:\ntracker", "Earned:\noutside", "Earned\ntotal",
+             "Eff.", "3-mo\neff.", "Billed $", "$ per\ndirect hr"]]
     for m in p["series"]:
         rows.append([m["short"] + (" (MTD)" if m.get("mtd") else ""), h(m["worked"]), h(m["off"]), h(m["direct"]),
-                     h(m["earned"]), pct(m["eff"]), pct(m["roll3"]), money(m["shipped"]), money(m["perHr"])])
-    t = Table(rows, colWidths=[W * 0.14] + [W * 0.1075] * 8, repeatRows=1)
+                     h(m.get("earnedTracked")), h(m.get("earnedOutside")) if m.get("earnedOutside") else "—", h(m["earned"]),
+                     pct(m["eff"]), pct(m["roll3"]), money(m["shipped"]), money(m["perHr"])])
+    t = Table(rows, colWidths=[W * 0.12] + [W * 0.088] * 10, repeatRows=1)
     st = base_table_style()
     for i, m in enumerate(p["series"], start=1):
         if i % 2 == 0:
             st.append(("BACKGROUND", (0, i), (-1, i), ALT))
         if m["mk"] == cur["mk"]:
             st += [("BACKGROUND", (0, i), (-1, i), SEL), ("FONTNAME", (0, i), (-1, i), "Helvetica-Bold")]
-        st.append(("TEXTCOLOR", (5, i), (5, i), eff_color(m["eff"])))
-        st.append(("TEXTCOLOR", (6, i), (6, i), eff_color(m["roll3"])))
+        st.append(("TEXTCOLOR", (7, i), (7, i), eff_color(m["eff"])))
+        st.append(("TEXTCOLOR", (8, i), (8, i), eff_color(m["roll3"])))
+        st.append(("FONTNAME", (6, i), (6, i), "Helvetica-Bold"))
     t.setStyle(TableStyle(st))
     story += [Spacer(1, 4), t]
 
@@ -602,12 +606,28 @@ def build_labor_pdf(p):
                               ("RIGHTPADDING", (0, 0), (0, -1), 12), ("RIGHTPADDING", (1, 0), (1, -1), 0)]))
     story += [pair]
 
+    # ── outside clients
+    outside = p.get("outside") or []
+    if outside:
+        orows = [["Client (not tracked in pipeline app)", "Earned hrs", "Billed $", "Notes"]]
+        for o in outside:
+            orows.append([o["client"], h(o["hours"]), money(o["revenue"]) if o.get("revenue") else "—",
+                          Paragraph(o.get("notes") or "", S["small"])])
+        orows.append(["Total", h(sum(o["hours"] for o in outside)),
+                      money(sum(o.get("revenue") or 0 for o in outside)) if any(o.get("revenue") for o in outside) else "—", ""])
+        ot = Table(orows, colWidths=[W * 0.36, W * 0.13, W * 0.15, W * 0.36], repeatRows=1)
+        ot.setStyle(TableStyle(base_table_style() + [
+            ("ALIGN", (3, 0), (3, -1), "LEFT"),
+            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E2EFDA")),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")]))
+        story += [KeepTogether([Paragraph(f"Outside clients — {cur['label']}", S["h2"]), ot])]
+
     # ── method
     story += [Spacer(1, 10), Paragraph(
         "<b>How these numbers are calculated.</b> Scheduled hours = each employee's weekly hours × working days "
         "(company holidays excluded). Worked hours = scheduled − time off + overtime, or payroll actuals where entered. "
         "Direct hours = worked × the employee's direct-labor share. Earned hours = quantity shipped in the month × BOM "
-        "labor hours per unit. Efficiency = earned ÷ direct hours. Because earned hours are recognized when product "
+        "labor hours per unit, plus hours billed to outside clients not yet tracked in the pipeline app. Efficiency = earned ÷ direct hours. Because earned hours are recognized when product "
         "ships, single months swing with shipment timing; the 3-month rolling figure is the steadier trend. "
         "Green ≥ 85%, amber 65–84%, red &lt; 65%.", S["small"])]
 
