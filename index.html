@@ -1228,7 +1228,12 @@ function renderProductivity(){
 
     <div class="labor-table">
       <div class="labor-table-title">Staffing — ${cur.label}</div>
-      <div class="labor-table-sub">Calculated from weekly hours, holidays and time off. Type a number in Actual to override with payroll hours.</div>
+      <div class="labor-table-sub">Calculated from weekly hours, holidays and time off. Actual (payroll) hours replace the calculation: type them in, or upload them from the time cards.</div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
+        <button class="btn btn-primary btn-xs" onclick="document.getElementById('actuals-file').click()">Upload actual hours (CSV)</button>
+        <input type="file" id="actuals-file" accept=".csv" style="display:none" onchange="importActualsCSV(event)"/>
+        <span style="font-size:11px;color:var(--text3);">Columns: employee, month (YYYY-MM), actual_hours. Re-uploading replaces earlier values.</span>
+      </div>
       ${hdr('1.3fr repeat(6,74px) 120px',['Employee','Scheduled','Holiday','Time off','Overtime','Worked','Direct','Actual (payroll)'])}
       ${staffRows}
     </div>
@@ -1341,6 +1346,94 @@ async function setActualOverride(empId,val){
   }catch(e){alert('Save error: '+e.message);}
 }
 
+// ── Payroll actual-hours import ────────────────────────────────
+// CSV: employee, month (YYYY-MM), actual_hours [, holiday_hours, vacation_hours, sick_hours, notes]
+// Each row sets that person's "Actual (payroll)" hours for the month (labor_logs), replacing any earlier value.
+let _actualsPending=null;
+
+function importActualsCSV(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    e.target.value='';
+    try{
+      const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());
+      const hdrs=parseCSVLine(lines[0]||'').map(h=>h.trim().replace(/^﻿/,'').toLowerCase());
+      const ix=n=>hdrs.indexOf(n);
+      if(ix('employee')<0||ix('month')<0||ix('actual_hours')<0){
+        alert('This file needs employee, month and actual_hours columns.');return;}
+      const rows=[],bad=[];
+      for(let i=1;i<lines.length;i++){
+        const c=parseCSVLine(lines[i]);const g=k=>(ix(k)>=0?(c[ix(k)]||'').trim():'');
+        const month=normMonth(g('month')),hours=parseFloat(g('actual_hours').replace(/,/g,''));
+        if(!g('employee')||!month||isNaN(hours)){bad.push(i+1);continue;}
+        const num=k=>parseFloat(g(k))||0;
+        rows.push({employee:g('employee'),month,hours,hol:num('holiday_hours'),vac:num('vacation_hours'),sick:num('sick_hours'),notes:g('notes')});
+      }
+      if(!rows.length){alert('No usable rows found.'+(bad.length?` Unreadable rows: ${bad.join(', ')}.`:''));return;}
+      _actualsPending={rows,bad};
+      const skip=calloutSkipList().map(s=>s.toLowerCase());
+      const unmatched=[...new Set(rows.map(r=>r.employee))].filter(n=>!matchCalloutName(n)&&!skip.includes(n.toLowerCase()));
+      if(unmatched.length){_mapNext=previewActualsImport;showCalloutMapping(unmatched);}
+      else previewActualsImport();
+    }catch(err){alert('Import error: '+err.message);}
+  };
+  r.readAsText(file);
+}
+
+function previewActualsImport(){
+  _mapNext=null;
+  const {rows,bad}=_actualsPending;
+  const use=[],skipped=[];
+  rows.forEach(r=>{const emp=matchCalloutName(r.employee);if(emp)use.push({...r,emp});else skipped.push(r);});
+  const months=[...new Set(use.map(u=>u.month))].sort();
+  const calcCache={};const calcFor=mk=>calcCache[mk]||(calcCache[mk]=calcMonth(mk));
+  const body=use.map(u=>{
+    const m=calcFor(u.month);const row=m.emps.find(r=>r.emp.id===u.emp.id);
+    const calc=row?Math.max(0,row.sched-row.off+row.ot):null;
+    const prev=laborLogs.find(l=>l.employeeId===u.emp.id&&l.month===u.month);
+    const diff=calc!=null?u.hours-calc:null;
+    return`<div style="display:grid;grid-template-columns:1.4fr 70px 80px 80px 80px;gap:6px;font-size:12px;padding:4px 0;border-bottom:0.5px solid var(--border);">
+      <span>${escHtml(u.emp.name)}${u.emp.name.toLowerCase()!==u.employee.toLowerCase()?` <span style="color:var(--text3);font-size:10px;">(${escHtml(u.employee)})</span>`:''}</span>
+      <span style="font-family:var(--mono);color:var(--text3);">${u.month}</span>
+      <span style="font-family:var(--mono);text-align:right;">${_h(u.hours)}</span>
+      <span style="font-family:var(--mono);text-align:right;color:var(--text3);">${calc!=null?_h(calc):'—'}</span>
+      <span style="font-family:var(--mono);text-align:right;color:${diff==null?'var(--text3)':Math.abs(diff)>16?'var(--amber)':'var(--text2)'};">${diff==null?'—':(diff>=0?'+':'')+_h(diff)}${prev?' <span title="replaces an earlier actual" style="color:var(--accent);">↺</span>':''}</span>
+    </div>`;}).join('');
+  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this){_actualsPending=null;closeModal();}">
+    <div class="modal" style="max-width:620px;">
+      <div class="modal-title">Import actual hours</div>
+      <div class="modal-note">${use.length} ${use.length===1?'person':'people'} · ${months.map(monthLabel).join(', ')}. These replace the calculated worked hours for each person and month. ↺ marks an actual already entered, which gets replaced.</div>
+      <div style="display:grid;grid-template-columns:1.4fr 70px 80px 80px 80px;gap:6px;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid var(--border2);">
+        <span>Employee</span><span>Month</span><span style="text-align:right;">Actual</span><span style="text-align:right;">Calculated</span><span style="text-align:right;">Difference</span></div>
+      <div style="max-height:340px;overflow-y:auto;margin-bottom:10px;">${body||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">Nobody in this file matches Team setup.</div>'}</div>
+      ${skipped.length?`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Skipping ${[...new Set(skipped.map(s=>escHtml(s.employee)))].join(', ')} (not tracked here).</div>`:''}
+      ${bad.length?`<div style="font-size:11px;color:var(--amber);margin-bottom:8px;">Unreadable rows skipped: ${bad.join(', ')}.</div>`:''}
+      <div class="modal-actions">
+        <button class="btn" onclick="_actualsPending=null;closeModal()">Cancel</button>
+        ${use.length?`<button class="btn btn-primary" id="actuals-go" onclick="applyActualsImport()">Import</button>`:''}
+      </div>
+    </div></div>`;
+}
+
+async function applyActualsImport(){
+  const btn=document.getElementById('actuals-go');if(btn){btn.disabled=true;btn.textContent='Importing…';}
+  try{
+    const use=_actualsPending.rows.map(r=>({...r,emp:matchCalloutName(r.employee)})).filter(r=>r.emp);
+    for(const u of use){
+      const extra=[u.hol?`holiday ${u.hol}h`:'',u.vac?`vacation ${u.vac}h`:'',u.sick?`sick ${u.sick}h`:''].filter(Boolean).join(', ');
+      const log={employeeId:u.emp.id,month:u.month,hours:u.hours,notes:['payroll actual',extra,u.notes].filter(Boolean).join(' · ')};
+      const saved=await dbSaveLog(log);
+      laborLogs=laborLogs.filter(l=>!(l.employeeId===u.emp.id&&l.month===u.month));
+      laborLogs.push({...log,id:saved.id});
+    }
+    const last=[...new Set(use.map(u=>u.month))].sort().pop();
+    _actualsPending=null;closeModal();
+    if(last)prodMonth=last;
+    renderProductivity();
+  }catch(e){alert('Import error: '+e.message);if(btn){btn.disabled=false;btn.textContent='Import';}}
+}
+
 async function addTimeOff(){
   const empId=document.getElementById('to-emp')?.value;
   const start=document.getElementById('to-start')?.value;
@@ -1367,6 +1460,7 @@ async function addTimeOff(){
 // entry_id, stored as time_off.source_id = 'callout:<entry_id>' so re-imports update instead of duplicate.
 const CALLOUT_TYPES={sick:'sick',vacation:'vacation',unpaid:'unpaid'};
 let _calloutPending=null;
+let _mapNext=null;  // which import continues after the name-mapping dialog
 
 function calloutSkipList(){try{return JSON.parse(localStorage.getItem('calloutSkip')||'[]');}catch(e){return[];}}
 function calloutSkipSave(list){try{localStorage.setItem('calloutSkip',JSON.stringify(list));}catch(e){}}
@@ -1416,12 +1510,12 @@ function showCalloutMapping(names){
   const opts=`<option value="">Skip — not tracked here</option>`+employees.map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('');
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay">
     <div class="modal">
-      <div class="modal-title">Match Callout Log names</div>
-      <div class="modal-note">These names from the Callout Log don't match anyone in Team setup. Pick who each one is. This is remembered, so you only do it once.</div>
+      <div class="modal-title">Match names</div>
+      <div class="modal-note">These names from the file don't match anyone in Team setup. Pick who each one is. This is remembered, so you only do it once.</div>
       ${names.map((n,i)=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin-bottom:8px;">
         <span style="font-weight:600;">${escHtml(n)}</span><select id="cm-${i}" data-name="${escHtml(n)}">${opts}</select></div>`).join('')}
       <div class="modal-actions">
-        <button class="btn" onclick="_calloutPending=null;closeModal()">Cancel</button>
+        <button class="btn" onclick="_calloutPending=null;_actualsPending=null;_mapNext=null;closeModal()">Cancel</button>
         <button class="btn btn-primary" onclick="saveCalloutMapping(${names.length})">Continue</button>
       </div>
     </div></div>`;
@@ -1437,7 +1531,7 @@ async function saveCalloutMapping(n){
       emp.calloutName=name;await dbSaveEmployee(emp);
     }
     calloutSkipSave(skip);
-    previewCalloutImport();
+    (_mapNext||previewCalloutImport)();
   }catch(e){alert('Save error: '+e.message);}
 }
 
