@@ -539,10 +539,10 @@ def build_labor_pdf(p):
 
     # ── 12-month trend
     story += [Paragraph("12-month trend", S["h2"]), trend_chart(p["series"], W)]
-    rows = [["Month", "Worked\nhrs", "Time\noff", "Direct\nhrs", "Earned:\ntracker", "Earned:\noutside", "Earned\ntotal",
+    rows = [["Month", "Worked\nhrs", "Leave\nhrs", "Direct\nhrs", "Earned:\ntracker", "Earned:\noutside", "Earned\ntotal",
              "Eff.", "3-mo\neff.", "Billed $", "$ per\ndirect hr"]]
     for m in p["series"]:
-        rows.append([m["short"] + (" (MTD)" if m.get("mtd") else ""), h(m["worked"]), h(m["off"]), h(m["direct"]),
+        rows.append([m["short"] + (" (est.)" if m.get("estimated") else ""), h(m["worked"]), h(m.get("leave")) if m.get("leave") else "—", h(m["direct"]),
                      h(m.get("earnedTracked")), h(m.get("earnedOutside")) if m.get("earnedOutside") else "—", h(m["earned"]),
                      pct(m["eff"]), pct(m["roll3"]), money(m["shipped"]), money(m["perHr"])])
     t = Table(rows, colWidths=[W * 0.12] + [W * 0.088] * 10, repeatRows=1)
@@ -558,39 +558,45 @@ def build_labor_pdf(p):
     t.setStyle(TableStyle(st))
     story += [Spacer(1, 4), t]
 
-    # ── staffing
+    # ── staffing (time cards are the single source of hours)
     staff = p.get("staff") or []
-    srows = [["Employee", "Wk hrs", "Scheduled", "Holiday", "Time off", "Overtime", "Worked", "Direct %", "Direct hrs", "Source"]]
-    tot = {k: 0 for k in ("sched", "hol", "off", "ot", "worked", "direct")}
+    srows = [["Employee", "Wk hrs", "Scheduled", "Holiday", "Sick", "Vacation", "Worked", "Direct %", "Direct hrs", "Source"]]
+    tot = {k: 0 for k in ("sched", "hol", "sick", "vac", "worked", "direct")}
     for s in staff:
         srows.append([Paragraph(f"<b>{s['name']}</b>" + (f" <font color='#888888' size='7'>{s['role']}</font>" if s.get("role") else ""), S["body"]),
-                      h(s["weekly"]), h(s["sched"]), h(s["hol"]), h(s["off"]) if s["off"] else "—",
-                      ("+" + h(s["ot"])) if s["ot"] else "—", h(s["worked"]), f"{s['pct']:g}%", h(s["direct"]),
-                      "Payroll" if s["source"] == "actual" else "Calculated"])
+                      h(s["weekly"]), h(s["sched"]), h(s["hol"]) if s["hol"] else "—", h(s["sick"]) if s["sick"] else "—",
+                      h(s["vac"]) if s["vac"] else "—", h(s["worked"]), f"{s['pct']:g}%", h(s["direct"]),
+                      "Time card" if s["source"] == "actual" else "Estimate"])
         for k in tot:
             tot[k] += s[k]
-    srows.append(["Total", "", h(tot["sched"]), h(tot["hol"]), h(tot["off"]), h(tot["ot"]), h(tot["worked"]), "", h(tot["direct"]), ""])
+    srows.append(["Total", "", h(tot["sched"]), h(tot["hol"]), h(tot["sick"]), h(tot["vac"]), h(tot["worked"]), "", h(tot["direct"]), ""])
     stbl = Table(srows, colWidths=[W * 0.22, W * 0.07, W * 0.09, W * 0.08, W * 0.08, W * 0.09, W * 0.08, W * 0.08, W * 0.09, W * 0.12], repeatRows=1)
     sst = base_table_style() + [("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E2EFDA")),
                                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
                                 ("ALIGN", (-1, 1), (-1, -1), "CENTER")]
-    for i in range(1, len(srows) - 1):
+    for i, s in enumerate(staff, start=1):
         if i % 2 == 0:
             sst.append(("BACKGROUND", (0, i), (-1, i), ALT))
+        if s["source"] != "actual":
+            sst.append(("TEXTCOLOR", (6, i), (6, i), AMBER))
+            sst.append(("TEXTCOLOR", (-1, i), (-1, i), AMBER))
     stbl.setStyle(TableStyle(sst))
     story += [KeepTogether([Paragraph(f"Staffing — {cur['label']}", S["h2"]), stbl])]
+    if any(s["source"] != "actual" for s in staff):
+        story += [Spacer(1, 3), Paragraph("Estimate = no time card uploaded for this month yet; worked hours are the person's "
+                                          "weekly schedule minus company holidays.", S["warn"])]
 
-    # ── time off + top SKUs side by side
-    to = p.get("timeOff") or []
-    torows = [["Employee", "Dates", "Hrs", "Type"]]
-    for x in to:
-        dates = x["start"][5:] if x["start"] == x["end"] else f"{x['start'][5:]} – {x['end'][5:]}"
-        torows.append([x["name"], dates, h(x["hours"]), Paragraph(x["type"] + (f" · {x['notes']}" if x.get("notes") else ""), S["small"])])
-    if len(torows) == 1:
-        torows.append(["None logged", "", "", ""])
+    # ── leave from time cards + top SKUs side by side
     half = (W - 12) / 2
-    tot_t = Table(torows, colWidths=[half * 0.28, half * 0.27, half * 0.12, half * 0.33], repeatRows=1)
-    tot_t.setStyle(TableStyle(base_table_style() + [("ALIGN", (1, 0), (1, -1), "LEFT"), ("ALIGN", (3, 0), (3, -1), "LEFT")]))
+    lrows = [["Employee", "Sick", "Vacation", "Time card notes"]]
+    for s in staff:
+        if s["source"] == "actual" and (s["sick"] or s["vac"] or s.get("notes")):
+            lrows.append([s["name"], h(s["sick"]) if s["sick"] else "—", h(s["vac"]) if s["vac"] else "—",
+                          Paragraph(s.get("notes") or "", S["small"])])
+    if len(lrows) == 1:
+        lrows.append(["None recorded", "", "", ""])
+    tot_t = Table(lrows, colWidths=[half * 0.26, half * 0.13, half * 0.17, half * 0.44], repeatRows=1)
+    tot_t.setStyle(TableStyle(base_table_style() + [("ALIGN", (3, 0), (3, -1), "LEFT")]))
 
     skrows = [["Top SKUs by earned hours", "Qty", "Earned hrs", "Shipped $"]]
     for s in p.get("skus") or []:
@@ -600,7 +606,7 @@ def build_labor_pdf(p):
     sk_t = Table(skrows, colWidths=[half * 0.47, half * 0.1, half * 0.21, half * 0.22], repeatRows=1)
     sk_t.setStyle(TableStyle(base_table_style()))
 
-    pair = Table([[Paragraph("Time off &amp; overtime", S["h2"]), Paragraph("What was built", S["h2"])],
+    pair = Table([[Paragraph("Leave &amp; notes (time cards)", S["h2"]), Paragraph("What was built", S["h2"])],
                   [tot_t, sk_t]], colWidths=[half + 6, half + 6])
     pair.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                               ("RIGHTPADDING", (0, 0), (0, -1), 12), ("RIGHTPADDING", (1, 0), (1, -1), 0)]))
@@ -625,7 +631,8 @@ def build_labor_pdf(p):
     # ── method
     story += [Spacer(1, 10), Paragraph(
         "<b>How these numbers are calculated.</b> Scheduled hours = each employee's weekly hours × working days "
-        "(company holidays excluded). Worked hours = scheduled − time off + overtime, or payroll actuals where entered. "
+        "(company holidays excluded). Worked hours come from the time cards (clocked hours, so overtime is included and "
+        "paid leave is not); a month without a time card upload uses scheduled hours as an estimate. "
         "Direct hours = worked × the employee's direct-labor share. Earned hours = quantity shipped in the month × BOM "
         "labor hours per unit, plus hours billed to outside clients not yet tracked in the pipeline app. Efficiency = earned ÷ direct hours. Because earned hours are recognized when product "
         "ships, single months swing with shipment timing; the 3-month rolling figure is the steadier trend. "

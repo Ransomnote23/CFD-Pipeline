@@ -247,7 +247,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── App state ──────────────────────────────────────────────────
-let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[],timeOff=[],outsideHours=[];
+let pos=[],customers=[],skus=[],employees=[],laborLogs=[],invoices=[],purchasing=[],outsideHours=[];
 let settings={companyName:'Small Car Performance',divisionName:'Electrical Manufacturing Division',preparedBy:'',monthlyTarget:0,laborCapacity:320};
 let expanded={},currentTab='pipeline';
 let filterStatus='',filterCustomer='',filterInherited='',searchQ='';
@@ -263,7 +263,7 @@ function setStatus(state,text){
 async function dbLoad(){
   setStatus('loading','Loading...');
   try{
-    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes,toRes,ohRes]=await Promise.all([
+    const [posRes,lineRes,shipRes,custRes,skuRes,setRes,empRes,logRes,invRes,purRes,ohRes]=await Promise.all([
       sb.from('pos').select('*').order('created_at'),
       sb.from('line_items').select('*').order('sort_order'),
       sb.from('shipments').select('*').order('created_at'),
@@ -274,7 +274,6 @@ async function dbLoad(){
       sb.from('labor_logs').select('*').order('month'),
       sb.from('invoices').select('*').order('issue_date',{ascending:false}),
       sb.from('purchasing').select('*'),
-      sb.from('time_off').select('*').order('start_date'),
       sb.from('outside_hours').select('*').order('month'),
     ]);
     if(posRes.error) throw posRes.error;
@@ -310,8 +309,7 @@ async function dbLoad(){
     skus=(skuRes.data||[]).map(s=>({desc:s.description,unit:s.unit,unitPrice:Number(s.unit_price),laborHours:Number(s.labor_hours||0)}));
     employees=(empRes.data||[]).map(e=>({id:e.id,name:e.name,role:e.role||'',active:e.active!==false,weeklyHours:e.weekly_hours!=null?Number(e.weekly_hours):40,directPct:e.direct_pct!=null?Number(e.direct_pct):100,startDate:e.start_date||'',endDate:e.end_date||'',calloutName:e.callout_name||''}));
     outsideHours=(ohRes.data||[]).map(o=>({id:o.id,client:o.client,month:o.month,hours:Number(o.hours),revenue:Number(o.revenue||0),notes:o.notes||''}));
-    timeOff=(toRes.data||[]).map(t=>({id:t.id,employeeId:t.employee_id,startDate:t.start_date,endDate:t.end_date,hours:Number(t.hours),type:t.type||'vacation',notes:t.notes||'',sourceId:t.source_id||''}));
-    laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||''}));
+    laborLogs=(logRes.data||[]).map(l=>({id:l.id,employeeId:l.employee_id,month:l.month,hours:Number(l.hours),notes:l.notes||'',hol:Number(l.holiday_hours||0),vac:Number(l.vacation_hours||0),sick:Number(l.sick_hours||0)}));
     invoices=(invRes.data||[]).map(mapInvoice);
     purchasing=(purRes.data||[]).map(r=>({poId:r.po_id,lineId:r.line_id,status:r.status||'none',date:r.status_date||'',notes:r.notes||''}));
     if(setRes.data){
@@ -373,20 +371,15 @@ async function dbSaveEmployee(emp){
   if(error)throw error;return data;
 }
 async function dbDeleteLog(empId,month){const {error}=await sb.from('labor_logs').delete().eq('employee_id',empId).eq('month',month);if(error)throw error;}
-async function dbSaveTimeOff(t){
-  const {data,error}=await sb.from('time_off').insert({employee_id:t.employeeId,start_date:t.startDate,end_date:t.endDate,hours:t.hours,type:t.type,notes:t.notes||''}).select().single();
-  if(error)throw error;return data;
-}
 async function dbInsertOutside(rows){
   const {data,error}=await sb.from('outside_hours').insert(rows.map(o=>({client:o.client,month:o.month,hours:o.hours,revenue:o.revenue||0,notes:o.notes||''}))).select();
   if(error)throw error;return data;
 }
 async function dbUpdateOutside(o){const {error}=await sb.from('outside_hours').update({client:o.client,month:o.month,hours:o.hours,revenue:o.revenue||0,notes:o.notes||''}).eq('id',o.id);if(error)throw error;}
 async function dbDeleteOutside(id){const {error}=await sb.from('outside_hours').delete().eq('id',id);if(error)throw error;}
-async function dbDeleteTimeOff(id){const {error}=await sb.from('time_off').delete().eq('id',id);if(error)throw error;}
 async function dbDeleteEmployee(id){const {error}=await sb.from('employees').delete().eq('id',id);if(error)throw error;}
 async function dbSaveLog(log){
-  const {data,error}=await sb.from('labor_logs').upsert({id:log.id||undefined,employee_id:log.employeeId,month:log.month,hours:log.hours,notes:log.notes||''},{onConflict:'employee_id,month'}).select().single();
+  const {data,error}=await sb.from('labor_logs').upsert({id:log.id||undefined,employee_id:log.employeeId,month:log.month,hours:log.hours,notes:log.notes||'',holiday_hours:log.hol||0,vacation_hours:log.vac||0,sick_hours:log.sick||0},{onConflict:'employee_id,month'}).select().single();
   if(error)throw error;return data;
 }
 async function dbSaveSettings(){
@@ -1056,8 +1049,6 @@ function weekdaysIn(a,b){
   return out;
 }
 
-function calDaysIn(a,b){const out=[];const d=new Date(a);const e=new Date(b);while(d<=e){out.push(ymdKey(d));d.setDate(d.getDate()+1);}return out;}
-const TO_TYPES={vacation:'Vacation',sick:'Sick',unpaid:'Unpaid leave',other:'Other time off',overtime:'Overtime / extra'};
 
 function calcMonth(mk){
   const [y,m]=mk.split('-').map(Number);
@@ -1066,7 +1057,7 @@ function calcMonth(mk){
   const mtd=today>=ms&&today<=me, future=today<ms;
   const winEnd=mtd?today:me;
   const msK=ymdKey(ms),weK=ymdKey(winEnd);
-  const emps=[],tot={sched:0,hol:0,off:0,ot:0,worked:0,direct:0};
+  const emps=[],tot={sched:0,hol:0,sick:0,vac:0,worked:0,direct:0};
   if(!future)employees.forEach(emp=>{
     const ov=laborLogs.find(l=>l.employeeId===emp.id&&l.month===mk);
     const st=emp.startDate?parseYmd(emp.startDate):null, en=emp.endDate?parseYmd(emp.endDate):null;
@@ -1077,20 +1068,11 @@ function calcMonth(mk){
     let work=0,hold=0;
     if(inRange)weekdaysIn(a,b).forEach(ds=>{if(isHoliday(ds))hold++;else work++;});
     const sched=work*daily,hol=hold*daily;
-    let off=0,ot=0;
-    timeOff.filter(t=>t.employeeId===emp.id).forEach(t=>{
-      // Time off spreads over scheduled workdays; overtime counts any calendar day (weekends included)
-      const all=t.type==='overtime'?calDaysIn(parseYmd(t.startDate),parseYmd(t.endDate||t.startDate))
-        :weekdaysIn(parseYmd(t.startDate),parseYmd(t.endDate||t.startDate)).filter(ds=>!isHoliday(ds));
-      if(!all.length)return;
-      const inM=all.filter(ds=>ds>=msK&&ds<=weK).length;
-      const h=t.hours*inM/all.length;
-      if(t.type==='overtime')ot+=h;else off+=h;
-    });
-    const worked=ov?ov.hours:Math.max(0,sched-off+ot);
+    // Time cards are the one source of truth. Without an upload, worked = scheduled (an estimate).
+    const worked=ov?ov.hours:sched;
     const pct=emp.directPct??100;
-    const r={emp,sched,hol,off,ot,override:ov?ov.hours:null,worked,pct,direct:worked*pct/100,source:ov?'actual':'calculated'};
-    emps.push(r);['sched','hol','off','ot','worked','direct'].forEach(k=>tot[k]+=r[k]);
+    const r={emp,sched,hol:ov?ov.hol:hol,sick:ov?ov.sick:0,vac:ov?ov.vac:0,override:ov?ov.hours:null,worked,pct,direct:worked*pct/100,source:ov?'actual':'estimate',notes:ov?ov.notes:''};
+    emps.push(r);['sched','hol','sick','vac','worked','direct'].forEach(k=>tot[k]+=r[k]);
   });
   let earned=0,shipped=0;const skuMap={};
   pos.forEach(po=>po.lines.forEach(l=>l.shipped.forEach(sh=>{
@@ -1105,7 +1087,8 @@ function calcMonth(mk){
   const outside=outsideHours.filter(o=>o.month===mk).sort((a,b)=>a.client.localeCompare(b.client));
   const earnedOutside=outside.reduce((s,o)=>s+o.hours,0),revOutside=outside.reduce((s,o)=>s+o.revenue,0);
   earned+=earnedOutside;shipped+=revOutside;
-  return{mk,label:monthLabel(mk),short:monthLabel(mk,'short'),mtd,future,emps,tot,earned,shipped,
+  const estimated=emps.filter(r=>r.source==='estimate').length;
+  return{mk,label:monthLabel(mk),short:monthLabel(mk,'short'),mtd,future,emps,tot,earned,shipped,estimated,
     earnedTracked,shippedTracked,earnedOutside,revOutside,outside,
     eff:tot.direct>0?earned/tot.direct:null,perHr:tot.direct>0?shipped/tot.direct:null,
     skus:skuList,noBom:skuList.filter(s=>s.hrs===0)};
@@ -1124,13 +1107,6 @@ function calcSeries(endMk,n){
 const _h=v=>v==null?'—':(Math.round(v*10)/10).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
 const _p=v=>v==null?'—':Math.round(v*100)+'%';
 const _effCls=v=>v==null?'':v>=.85?'green':v>=.65?'amber':'red';
-
-function timeOffInMonth(mk){
-  const [y,m]=mk.split('-').map(Number);
-  const s=ymdKey(new Date(y,m-1,1)),e=ymdKey(new Date(y,m,0));
-  return timeOff.filter(t=>t.startDate<=e&&(t.endDate||t.startDate)>=s)
-    .sort((a,b)=>a.startDate.localeCompare(b.startDate));
-}
 
 function renderProductivity(){
   const series=calcSeries(prodMonth,12);
@@ -1154,23 +1130,23 @@ function renderProductivity(){
 
   const warn=[];
   if(!employees.length)warn.push('No employees set up yet — add your team in the Team setup section below.');
-  if(cur.mtd)warn.push(`${cur.label} is still in progress — hours are calculated through today.`);
+  if(cur.estimated)warn.push(`${cur.estimated} of ${cur.emps.length} people have no time card upload for ${cur.label}, so their hours are estimated from their weekly schedule. Upload the time cards to replace the estimate.`);
   if(cur.noBom.length)warn.push(`${cur.noBom.length} SKU${cur.noBom.length>1?'s':''} shipped this month ${cur.noBom.length>1?'have':'has'} no BOM hours, so earned hours are understated: ${cur.noBom.slice(0,4).map(s=>escHtml(s.desc)).join('; ')}${cur.noBom.length>4?'…':''}`);
   const warnHtml=warn.map(w=>`<div style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);border-radius:6px;padding:8px 12px;font-size:12px;margin-bottom:10px;">${w}</div>`).join('');
 
   const trendRows=series.map(m=>`<div class="lt-row${m.mk===prodMonth?' total-row':''}" style="grid-template-columns:1fr repeat(8,78px);cursor:pointer;" onclick="prodMonth='${m.mk}';renderProductivity()">
-      <span>${m.short}${m.mtd?' <span style="font-size:10px;color:var(--text3);">MTD</span>':''}</span>
-      <span class="lt-val">${_h(m.tot.worked)}</span><span class="lt-val">${_h(m.tot.off)}</span>
+      <span>${m.short}${m.estimated?` <span style="font-size:10px;color:var(--amber);" title="${m.estimated} without a time card upload">est.</span>`:''}</span>
+      <span class="lt-val">${_h(m.tot.worked)}</span><span class="lt-val">${m.tot.sick+m.tot.vac?_h(m.tot.sick+m.tot.vac):'—'}</span>
       <span class="lt-val">${_h(m.tot.direct)}</span><span class="lt-val" style="color:var(--text3);">${m.earnedOutside?_h(m.earnedOutside):'—'}</span><span class="lt-val amber">${_h(m.earned)}</span>
       <span class="lt-val ${_effCls(m.eff)}">${_p(m.eff)}</span><span class="lt-val ${_effCls(m.roll3)}">${_p(m.roll3)}</span>
       <span class="lt-val">${m.perHr==null?'—':fmt(m.perHr)}</span></div>`).join('');
 
-  const staffRows=cur.emps.map(r=>`<div class="lt-row" style="grid-template-columns:1.3fr repeat(6,74px) 120px;">
+  const staffRows=cur.emps.map(r=>`<div class="lt-row" style="grid-template-columns:1.3fr repeat(6,74px) 120px;"${r.notes?` title="${escHtml(r.notes)}"`:''}>
       <span>${escHtml(r.emp.name)} <span style="color:var(--text3);font-size:11px;">${escHtml(r.emp.role)}</span></span>
-      <span class="lt-val">${_h(r.sched)}</span><span class="lt-val">${_h(r.hol)}</span>
-      <span class="lt-val">${r.off?_h(r.off):'—'}</span><span class="lt-val">${r.ot?'+'+_h(r.ot):'—'}</span>
-      <span class="lt-val">${_h(r.worked)}</span><span class="lt-val">${_h(r.direct)}${r.pct<100?` <span style="font-size:10px;color:var(--text3);">${r.pct}%</span>`:''}</span>
-      <input class="field-input" type="number" step="0.5" min="0" placeholder="${_h(Math.max(0,r.sched-r.off+r.ot))} calc" value="${r.override??''}" title="Actual hours from payroll — overrides the calculated number" onchange="setActualOverride('${r.emp.id}',this.value)" style="font-size:11px;${r.override!=null?'border-color:var(--accent);':''}"/>
+      <span class="lt-val">${_h(r.sched)}</span><span class="lt-val">${r.hol?_h(r.hol):'—'}</span>
+      <span class="lt-val">${r.sick?_h(r.sick):'—'}</span><span class="lt-val">${r.vac?_h(r.vac):'—'}</span>
+      <span class="lt-val"${r.source==='estimate'?' style="color:var(--amber);" title="Estimate: no time card uploaded"':''}>${_h(r.worked)}</span><span class="lt-val">${_h(r.direct)}${r.pct<100?` <span style="font-size:10px;color:var(--text3);">${r.pct}%</span>`:''}</span>
+      <input class="field-input" type="number" step="0.5" min="0" placeholder="${_h(r.sched)} est." value="${r.override??''}" title="Worked hours from the time card" onchange="setActualOverride('${r.emp.id}',this.value)" style="font-size:11px;${r.override!=null?'border-color:var(--accent);':''}"/>
     </div>`).join('')||'<div style="padding:12px 14px;font-size:12px;color:var(--text3);">No staff counted in this month</div>';
 
   const outsideRows=cur.outside.map(o=>`<div class="lt-row" style="grid-template-columns:1.4fr 90px 110px 1.3fr 50px;">
@@ -1181,15 +1157,6 @@ function renderProductivity(){
       <button class="btn btn-xs btn-danger" onclick="removeOutside('${o.id}')">✕</button></div>`).join('')||'<div style="padding:10px 14px;font-size:12px;color:var(--text3);">None entered for this month</div>';
   const ohClients=[...new Set(outsideHours.map(o=>o.client))].sort().map(c=>`<option value="${escHtml(c)}"/>`).join('');
   const ohMonthOpts=Array.from({length:37},(_,i)=>addMonths(ymKey(new Date()),1-i)).map(mk=>`<option value="${mk}"${mk===prodMonth?' selected':''}>${monthLabel(mk)}</option>`).join('');
-  const toRows=timeOffInMonth(prodMonth).map(t=>`<div class="lt-row" style="grid-template-columns:1fr 1.2fr 70px 1.4fr 50px;">
-      <span>${escHtml(empName(t.employeeId))}</span>
-      <span style="font-family:var(--mono);font-size:11px;">${t.startDate}${t.endDate&&t.endDate!==t.startDate?' → '+t.endDate:''}</span>
-      <span class="lt-val">${t.type==='overtime'?'+':''}${_h(t.hours)}</span>
-      <span style="font-size:11px;color:var(--text2);">${TO_TYPES[t.type]||t.type}${t.notes?' · '+escHtml(t.notes):''}${t.sourceId?' <span class="badge" style="background:var(--accent-dim);color:var(--accent);font-size:9px;">Callout Log</span>':''}</span>
-      <button class="btn btn-xs btn-danger" onclick="removeTimeOff('${t.id}')">✕</button></div>`).join('')||'<div style="padding:10px 14px;font-size:12px;color:var(--text3);">None this month</div>';
-
-  const empOpts=employees.filter(e=>e.active).map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('');
-  const hols=holidaysForYear(+prodMonth.slice(0,4)).map(h=>`${h.name} ${h.date.slice(5)}`).join(' · ');
 
   const teamRows=employees.map(e=>`<div class="lt-row" style="grid-template-columns:1.1fr 1fr 70px 70px 120px 120px 80px 60px;">
       <input class="field-input" id="emp-${e.id}-name" value="${escHtml(e.name)}" onchange="updEmp('${e.id}','name',this.value)" style="font-size:12px;"/>
@@ -1222,19 +1189,19 @@ function renderProductivity(){
     <div class="labor-table">
       <div class="labor-table-title">12-month trend</div>
       <div class="labor-table-sub">Click a month to select it &nbsp;·&nbsp; earned = tracker shipments + outside clients &nbsp;·&nbsp; efficiency = earned ÷ direct hrs &nbsp;·&nbsp; <span style="color:var(--green);">≥85% good</span> <span style="color:var(--amber);">65–84% watch</span> <span style="color:var(--red);">&lt;65% review</span></div>
-      ${hdr('1fr repeat(8,78px)',['Month','Worked','Time off','Direct','Outside','Earned','Eff','3-mo eff','$ / hr'])}
+      ${hdr('1fr repeat(8,78px)',['Month','Worked','Leave','Direct','Outside','Earned','Eff','3-mo eff','$ / hr'])}
       ${trendRows}
     </div>
 
     <div class="labor-table">
       <div class="labor-table-title">Staffing — ${cur.label}</div>
-      <div class="labor-table-sub">Calculated from weekly hours, holidays and time off. Actual (payroll) hours replace the calculation: type them in, or upload them from the time cards.</div>
+      <div class="labor-table-sub">Hours come from the time cards: upload them each month (or type a correction in Time card hours). Until a month is uploaded, worked hours are estimated from each person's weekly schedule minus company holidays.</div>
       <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
-        <button class="btn btn-primary btn-xs" onclick="document.getElementById('actuals-file').click()">Upload actual hours (CSV)</button>
+        <button class="btn btn-primary btn-xs" onclick="document.getElementById('actuals-file').click()">Upload time card hours (CSV)</button>
         <input type="file" id="actuals-file" accept=".csv" style="display:none" onchange="importActualsCSV(event)"/>
-        <span style="font-size:11px;color:var(--text3);">Columns: employee, month (YYYY-MM), actual_hours. Re-uploading replaces earlier values.</span>
+        <span style="font-size:11px;color:var(--text3);">Columns: employee, month, actual_hours, holiday_hours, vacation_hours, sick_hours, notes. Re-uploading replaces earlier values.</span>
       </div>
-      ${hdr('1.3fr repeat(6,74px) 120px',['Employee','Scheduled','Holiday','Time off','Overtime','Worked','Direct','Actual (payroll)'])}
+      ${hdr('1.3fr repeat(6,74px) 120px',['Employee','Scheduled','Holiday','Sick','Vacation','Worked','Direct','Time card hours'])}
       ${staffRows}
     </div>
 
@@ -1260,28 +1227,8 @@ function renderProductivity(){
     </div>
 
     <div class="labor-table">
-      <div class="labor-table-title">Time off &amp; overtime — ${cur.label}</div>
-      <div class="labor-table-sub">Import each pay period from the Callout Log, or log exceptions by hand. Leave hours blank to use full days at the employee's normal daily hours. Holidays are automatic: ${hols}</div>
-      <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
-        <button class="btn btn-primary btn-xs" onclick="document.getElementById('callout-file').click()">Import from Callout Log (CSV)</button>
-        <input type="file" id="callout-file" accept=".csv" style="display:none" onchange="importCalloutCSV(event)"/>
-        <span style="font-size:11px;color:var(--text3);">Safe to re-import: days already brought in are updated, not duplicated.</span>
-      </div>
-      ${toRows}
-      <div style="display:grid;grid-template-columns:1.2fr 130px 130px 80px 1fr 1.2fr auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid var(--border);">
-        <div><div class="field-label" style="margin-bottom:4px;">Employee</div><select id="to-emp" style="width:100%;">${empOpts}</select></div>
-        <div><div class="field-label" style="margin-bottom:4px;">From</div><input id="to-start" class="field-input" type="date"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">To</div><input id="to-end" class="field-input" type="date"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Hours</div><input id="to-hrs" class="field-input" type="number" step="0.5" min="0" placeholder="auto"/></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Type</div><select id="to-type" style="width:100%;">${Object.entries(TO_TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
-        <div><div class="field-label" style="margin-bottom:4px;">Notes</div><input id="to-notes" class="field-input" type="text" placeholder="Optional"/></div>
-        <button class="btn btn-primary" onclick="addTimeOff()">+ Add</button>
-      </div>
-    </div>
-
-    <div class="labor-table">
       <div class="labor-table-title">Team setup</div>
-      <div class="labor-table-sub">Set once. Weekly hours drive the schedule; direct % is the share of time spent on product tracked in this app (e.g. 60% for someone who also does purchasing). Use an end date when someone leaves so history stays correct.</div>
+      <div class="labor-table-sub">Set once. Weekly hours drive the estimate for months without a time card upload; direct % is the share of time spent on product tracked in this app (e.g. 60% for someone who also does purchasing). Use an end date when someone leaves so history stays correct.</div>
       ${hdr('1.1fr 1fr 70px 70px 120px 120px 80px 60px',['Name','Role','Wk hrs','Direct %','Start date','End date','',''])}
       ${teamRows}
       <div style="display:grid;grid-template-columns:1.1fr 1fr 70px 70px 120px auto;gap:8px;align-items:end;padding:12px 14px;border-top:1px solid var(--border);">
@@ -1320,12 +1267,11 @@ async function addEmployee(){
 }
 
 async function removeEmployee(id){
-  if(!confirm('Delete this employee and all their time off and actual-hours history? To keep history, set an end date or uncheck active instead.'))return;
+  if(!confirm('Delete this employee and all their time card hours? To keep history, set an end date or uncheck active instead.'))return;
   try{
     await dbDeleteEmployee(id);
     employees=employees.filter(e=>e.id!==id);
     laborLogs=laborLogs.filter(l=>l.employeeId!==id);
-    timeOff=timeOff.filter(t=>t.employeeId!==id);
     renderProductivity();
   }catch(e){alert('Error: '+e.message);}
 }
@@ -1337,7 +1283,8 @@ async function setActualOverride(empId,val){
       await dbDeleteLog(empId,prodMonth);
       laborLogs=laborLogs.filter(l=>!(l.employeeId===empId&&l.month===prodMonth));
     }else{
-      const log={employeeId:empId,month:prodMonth,hours:parseFloat(v)||0,notes:'payroll actual'};
+      const prev=laborLogs.find(l=>l.employeeId===empId&&l.month===prodMonth)||{};
+      const log={employeeId:empId,month:prodMonth,hours:parseFloat(v)||0,notes:prev.notes||'time card',hol:prev.hol||0,vac:prev.vac||0,sick:prev.sick||0};
       const saved=await dbSaveLog(log);
       laborLogs=laborLogs.filter(l=>!(l.employeeId===empId&&l.month===prodMonth));
       laborLogs.push({...log,id:saved.id});
@@ -1390,7 +1337,7 @@ function previewActualsImport(){
   const calcCache={};const calcFor=mk=>calcCache[mk]||(calcCache[mk]=calcMonth(mk));
   const body=use.map(u=>{
     const m=calcFor(u.month);const row=m.emps.find(r=>r.emp.id===u.emp.id);
-    const calc=row?Math.max(0,row.sched-row.off+row.ot):null;
+    const calc=row?row.sched:null;
     const prev=laborLogs.find(l=>l.employeeId===u.emp.id&&l.month===u.month);
     const diff=calc!=null?u.hours-calc:null;
     return`<div style="display:grid;grid-template-columns:1.4fr 70px 80px 80px 80px;gap:6px;font-size:12px;padding:4px 0;border-bottom:0.5px solid var(--border);">
@@ -1402,10 +1349,10 @@ function previewActualsImport(){
     </div>`;}).join('');
   document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this){_actualsPending=null;closeModal();}">
     <div class="modal" style="max-width:620px;">
-      <div class="modal-title">Import actual hours</div>
-      <div class="modal-note">${use.length} ${use.length===1?'person':'people'} · ${months.map(monthLabel).join(', ')}. These replace the calculated worked hours for each person and month. ↺ marks an actual already entered, which gets replaced.</div>
+      <div class="modal-title">Upload time card hours</div>
+      <div class="modal-note">${use.length} ${use.length===1?'person':'people'} · ${months.map(monthLabel).join(', ')}. These become each person's worked hours for the month. ↺ marks a month already uploaded, which gets replaced.</div>
       <div style="display:grid;grid-template-columns:1.4fr 70px 80px 80px 80px;gap:6px;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid var(--border2);">
-        <span>Employee</span><span>Month</span><span style="text-align:right;">Actual</span><span style="text-align:right;">Calculated</span><span style="text-align:right;">Difference</span></div>
+        <span>Employee</span><span>Month</span><span style="text-align:right;">Time card</span><span style="text-align:right;">Estimate</span><span style="text-align:right;">Difference</span></div>
       <div style="max-height:340px;overflow-y:auto;margin-bottom:10px;">${body||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">Nobody in this file matches Team setup.</div>'}</div>
       ${skipped.length?`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Skipping ${[...new Set(skipped.map(s=>escHtml(s.employee)))].join(', ')} (not tracked here).</div>`:''}
       ${bad.length?`<div style="font-size:11px;color:var(--amber);margin-bottom:8px;">Unreadable rows skipped: ${bad.join(', ')}.</div>`:''}
@@ -1421,8 +1368,7 @@ async function applyActualsImport(){
   try{
     const use=_actualsPending.rows.map(r=>({...r,emp:matchCalloutName(r.employee)})).filter(r=>r.emp);
     for(const u of use){
-      const extra=[u.hol?`holiday ${u.hol}h`:'',u.vac?`vacation ${u.vac}h`:'',u.sick?`sick ${u.sick}h`:''].filter(Boolean).join(', ');
-      const log={employeeId:u.emp.id,month:u.month,hours:u.hours,notes:['payroll actual',extra,u.notes].filter(Boolean).join(' · ')};
+      const log={employeeId:u.emp.id,month:u.month,hours:u.hours,notes:u.notes||'',hol:u.hol,vac:u.vac,sick:u.sick};
       const saved=await dbSaveLog(log);
       laborLogs=laborLogs.filter(l=>!(l.employeeId===u.emp.id&&l.month===u.month));
       laborLogs.push({...log,id:saved.id});
@@ -1434,34 +1380,10 @@ async function applyActualsImport(){
   }catch(e){alert('Import error: '+e.message);if(btn){btn.disabled=false;btn.textContent='Import';}}
 }
 
-async function addTimeOff(){
-  const empId=document.getElementById('to-emp')?.value;
-  const start=document.getElementById('to-start')?.value;
-  const end=document.getElementById('to-end')?.value||start;
-  if(!empId||!start){alert('Pick an employee and a start date.');return;}
-  if(end<start){alert('End date is before start date.');return;}
-  const emp=employees.find(e=>e.id===empId);
-  let hrs=parseFloat(document.getElementById('to-hrs')?.value);
-  const typ=document.getElementById('to-type')?.value||'vacation';
-  if(isNaN(hrs)&&typ==='overtime'){alert('Enter the number of overtime hours.');return;}
-  if(isNaN(hrs)){
-    const days=weekdaysIn(parseYmd(start),parseYmd(end)).filter(ds=>!isHoliday(ds)).length;
-    hrs=days*(emp?.weeklyHours||0)/5;
-  }
-  const t={employeeId:empId,startDate:start,endDate:end,hours:hrs,
-    type:document.getElementById('to-type')?.value||'vacation',
-    notes:document.getElementById('to-notes')?.value.trim()||''};
-  try{const saved=await dbSaveTimeOff(t);timeOff.push({...t,id:saved.id});renderProductivity();}
-  catch(e){alert('Error: '+e.message);}
-}
 
-// ── Callout Log sync ───────────────────────────────────────────
-// Imports the CSV the Callout Log exports per pay period. Each row is one person-day with a stable
-// entry_id, stored as time_off.source_id = 'callout:<entry_id>' so re-imports update instead of duplicate.
-const CALLOUT_TYPES={sick:'sick',vacation:'vacation',unpaid:'unpaid'};
+// ── Name matching (time card uploads) ───────────────────────────
+let _mapNext=null;  // continues the upload after the name-mapping dialog
 let _calloutPending=null;
-let _mapNext=null;  // which import continues after the name-mapping dialog
-
 function calloutSkipList(){try{return JSON.parse(localStorage.getItem('calloutSkip')||'[]');}catch(e){return[];}}
 function calloutSkipSave(list){try{localStorage.setItem('calloutSkip',JSON.stringify(list));}catch(e){}}
 
@@ -1474,36 +1396,6 @@ function matchCalloutName(name){
   const first=n.split(/\s+/)[0];
   const byFirst=employees.filter(e=>e.name.trim().toLowerCase().split(/\s+/)[0]===first);
   return byFirst.length===1?byFirst[0]:null;
-}
-
-function importCalloutCSV(e){
-  const file=e.target.files[0];if(!file)return;
-  const r=new FileReader();
-  r.onload=ev=>{
-    e.target.value='';
-    try{
-      const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());
-      const hdrs=parseCSVLine(lines[0]||'').map(h=>h.trim().replace(/^﻿/,'').toLowerCase());
-      const ix=n=>hdrs.indexOf(n);
-      if(['entry_id','date','employee','type','hours'].some(c=>ix(c)<0)){
-        alert('This doesn\'t look like a Callout Log export. Use "Download for Productivity tracker" on the Callout Log\'s Payroll tab.');return;}
-      const rows=[],ranges=new Map();
-      for(let i=1;i<lines.length;i++){
-        const c=parseCSVLine(lines[i]);const g=k=>(ix(k)>=0?(c[ix(k)]||'').trim():'');
-        const ps=g('period_start'),pe=g('period_end');
-        if(/^\d{4}-\d{2}-\d{2}$/.test(ps)&&/^\d{4}-\d{2}-\d{2}$/.test(pe))ranges.set(ps,pe);
-        const type=g('type').toLowerCase();
-        if(!g('entry_id')||!CALLOUT_TYPES[type]||!/^\d{4}-\d{2}-\d{2}$/.test(g('date')))continue;
-        rows.push({entryId:g('entry_id'),date:g('date'),employee:g('employee'),type:CALLOUT_TYPES[type],hours:parseFloat(g('hours'))||0,note:g('note')});
-      }
-      if(!rows.length&&!ranges.size){alert('No time off found in that file.');return;}
-      _calloutPending={rows,ranges:[...ranges.entries()].map(([s,e])=>({start:s,end:e}))};
-      const skip=calloutSkipList().map(s=>s.toLowerCase());
-      const unmatched=[...new Set(rows.map(r=>r.employee))].filter(n=>!matchCalloutName(n)&&!skip.includes(n.toLowerCase()));
-      if(unmatched.length)showCalloutMapping(unmatched);else previewCalloutImport();
-    }catch(err){alert('Import error: '+err.message);}
-  };
-  r.readAsText(file);
 }
 
 function showCalloutMapping(names){
@@ -1531,89 +1423,10 @@ async function saveCalloutMapping(n){
       emp.calloutName=name;await dbSaveEmployee(emp);
     }
     calloutSkipSave(skip);
-    (_mapNext||previewCalloutImport)();
+    if(_mapNext)_mapNext();
   }catch(e){alert('Save error: '+e.message);}
 }
 
-function calloutPlan(){
-  const {rows,ranges}=_calloutPending;
-  const want=new Map(),skipped=[];
-  rows.forEach(r=>{
-    const emp=matchCalloutName(r.employee);
-    if(!emp){skipped.push(r);return;}
-    want.set('callout:'+r.entryId,{sourceId:'callout:'+r.entryId,employeeId:emp.id,startDate:r.date,endDate:r.date,hours:r.hours,type:r.type,notes:r.note});
-  });
-  const have=new Map(timeOff.filter(t=>t.sourceId).map(t=>[t.sourceId,t]));
-  const adds=[],updates=[],removes=[];
-  want.forEach((w,k)=>{
-    const h=have.get(k);
-    if(!h)adds.push(w);
-    else if(h.employeeId!==w.employeeId||h.startDate!==w.startDate||h.hours!==w.hours||h.type!==w.type||(h.notes||'')!==(w.notes||''))updates.push({...w,id:h.id});
-  });
-  // Days deleted in the Callout Log: only within the pay periods this file covers
-  timeOff.filter(t=>t.sourceId&&t.sourceId.startsWith('callout:')&&!want.has(t.sourceId)
-    &&ranges.some(p=>t.startDate>=p.start&&t.startDate<=p.end)).forEach(t=>removes.push(t));
-  // Hand-entered time off on the same person-day would double-count
-  const overlaps=[...want.values()].filter(w=>timeOff.some(t=>!t.sourceId&&t.employeeId===w.employeeId&&t.startDate<=w.startDate&&(t.endDate||t.startDate)>=w.startDate&&t.type!=='overtime'));
-  return{adds,updates,removes,skipped,overlaps,total:want.size};
-}
-
-function previewCalloutImport(){
-  const p=calloutPlan();const {ranges}=_calloutPending;
-  const empName=id=>employees.find(e=>e.id===id)?.name||'—';
-  const fmtD=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});};
-  const rangeTxt=ranges.length?ranges.map(r=>`${fmtD(r.start)} – ${fmtD(r.end)}, ${r.end.slice(0,4)}`).join('; '):'all dates in the file';
-  const byPerson={};
-  [...p.adds,...p.updates].forEach(w=>{const k=empName(w.employeeId);(byPerson[k]=byPerson[k]||{sick:0,vacation:0,unpaid:0})[w.type]+=w.hours;});
-  const lines=Object.entries(byPerson).sort().map(([n,t])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:0.5px solid var(--border);"><span>${escHtml(n)}</span><span style="font-family:var(--mono);color:var(--text2);">${['vacation','sick','unpaid'].filter(k=>t[k]).map(k=>`${TO_TYPES[k]} ${_h(t[k])}h`).join(' · ')}</span></div>`).join('');
-  const nothing=!p.adds.length&&!p.updates.length&&!p.removes.length;
-  document.getElementById('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this){_calloutPending=null;closeModal();}">
-    <div class="modal">
-      <div class="modal-title">Import from Callout Log</div>
-      <div class="modal-note">Pay period: <strong>${rangeTxt}</strong><br>
-        ${nothing?'Already up to date — nothing to change.':`<strong>${p.adds.length}</strong> day${p.adds.length!==1?'s':''} to add · <strong>${p.updates.length}</strong> to update · <strong>${p.removes.length}</strong> to remove (deleted in the Callout Log)`}</div>
-      ${lines?`<div style="margin-bottom:12px;">${lines}</div>`:''}
-      ${p.overlaps.length?`<div style="background:var(--amber-dim);color:var(--amber);border-radius:6px;padding:8px 10px;font-size:12px;margin-bottom:10px;">${p.overlaps.length} imported day${p.overlaps.length!==1?'s':''} also ha${p.overlaps.length!==1?'ve':'s'} time off entered by hand here, which double-counts. Delete the hand-entered row${p.overlaps.length!==1?'s':''} (no Callout Log tag) in the Time off list.</div>`:''}
-      ${p.skipped.length?`<div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Skipping ${p.skipped.length} day${p.skipped.length!==1?'s':''} for people not tracked here (${[...new Set(p.skipped.map(s=>escHtml(s.employee)))].join(', ')}).</div>`:''}
-      <div class="modal-actions">
-        <button class="btn" onclick="_calloutPending=null;closeModal()">${nothing?'Close':'Cancel'}</button>
-        ${nothing?'':`<button class="btn btn-primary" id="callout-go" onclick="applyCalloutImport()">Import</button>`}
-      </div>
-    </div></div>`;
-}
-
-async function applyCalloutImport(){
-  const btn=document.getElementById('callout-go');if(btn){btn.disabled=true;btn.textContent='Importing…';}
-  const p=calloutPlan();
-  try{
-    const ups=[...p.adds,...p.updates];
-    if(ups.length){
-      const {data,error}=await sb.from('time_off').upsert(ups.map(w=>({source_id:w.sourceId,employee_id:w.employeeId,start_date:w.startDate,end_date:w.endDate,hours:w.hours,type:w.type,notes:w.notes||''})),{onConflict:'source_id'}).select();
-      if(error)throw error;
-      data.forEach(d=>{
-        const rec={id:d.id,employeeId:d.employee_id,startDate:d.start_date,endDate:d.end_date,hours:Number(d.hours),type:d.type,notes:d.notes||'',sourceId:d.source_id};
-        const i=timeOff.findIndex(t=>t.id===d.id);if(i>=0)timeOff[i]=rec;else timeOff.push(rec);
-      });
-    }
-    if(p.removes.length){
-      const ids=p.removes.map(t=>t.id);
-      const {error}=await sb.from('time_off').delete().in('id',ids);if(error)throw error;
-      timeOff=timeOff.filter(t=>!ids.includes(t.id));
-    }
-    timeOff.sort((a,b)=>a.startDate.localeCompare(b.startDate));
-    _calloutPending=null;closeModal();
-    // Jump to the month the import covers
-    const lastDay=[...ups.map(w=>w.startDate)].sort().pop();
-    if(lastDay)prodMonth=lastDay.slice(0,7);
-    renderProductivity();
-  }catch(e){alert('Import error: '+e.message);if(btn){btn.disabled=false;btn.textContent='Import';}}
-}
-
-async function removeTimeOff(id){
-  if(!confirm('Remove this entry?'))return;
-  try{await dbDeleteTimeOff(id);timeOff=timeOff.filter(t=>t.id!==id);renderProductivity();}
-  catch(e){alert('Error: '+e.message);}
-}
 
 async function addOutside(){
   const client=document.getElementById('oh-client')?.value.trim();
@@ -1684,14 +1497,13 @@ function exportProdCSV(){
   const series=calcSeries(prodMonth,12);
   const q=s=>`"${String(s??'').replace(/"/g,'""')}"`;
   const n=v=>v==null?'':Math.round(v*100)/100;
-  const rows=[['record_type','month','employee','role','weekly_hours','direct_pct','scheduled_hrs','holiday_hrs','time_off_hrs','overtime_hrs','hours_source','worked_hrs','direct_hrs','earned_hrs','shipped_value','efficiency','rolling_3mo_efficiency','shipped_value_per_direct_hr','sku','sku_qty_shipped','earned_hrs_tracker','earned_hrs_outside','outside_client']];
+  const rows=[['record_type','month','employee','role','weekly_hours','direct_pct','scheduled_hrs','holiday_hrs','sick_hrs','vacation_hrs','hours_source','worked_hrs','direct_hrs','earned_hrs','shipped_value','efficiency','rolling_3mo_efficiency','shipped_value_per_direct_hr','sku_or_client','qty_or_notes','earned_hrs_tracker','earned_hrs_outside']];
   series.forEach(m=>{
-    rows.push(['month_total',m.mk,'','','','',n(m.tot.sched),n(m.tot.hol),n(m.tot.off),n(m.tot.ot),m.mtd?'partial_month':'',n(m.tot.worked),n(m.tot.direct),n(m.earned),n(m.shipped),n(m.eff),n(m.roll3),n(m.perHr),'','',n(m.earnedTracked),n(m.earnedOutside),'']);
-    m.outside.forEach(o=>rows.push(['outside_client',m.mk,'','','','','','','','','','','',n(o.hours),n(o.revenue),'','','',q(o.notes),'','',n(o.hours),q(o.client)]));
-    m.emps.forEach(r=>rows.push(['employee',m.mk,q(r.emp.name),q(r.emp.role),r.emp.weeklyHours,r.pct,n(r.sched),n(r.hol),n(r.off),n(r.ot),r.source,n(r.worked),n(r.direct),'','','','','','','','','','']));
-    m.skus.forEach(s=>rows.push(['sku',m.mk,'','','','','','','','','','','',n(s.hrs),n(s.value),'','','',q(s.desc),s.qty,n(s.hrs),'','']));
+    rows.push(['month_total',m.mk,'','','','',n(m.tot.sched),n(m.tot.hol),n(m.tot.sick),n(m.tot.vac),!m.emps.length?'':m.estimated?`${m.estimated}_estimated`:'time_cards',n(m.tot.worked),n(m.tot.direct),n(m.earned),n(m.shipped),n(m.eff),n(m.roll3),n(m.perHr),'','',n(m.earnedTracked),n(m.earnedOutside)]);
+    m.emps.forEach(r=>rows.push(['employee',m.mk,q(r.emp.name),q(r.emp.role),r.emp.weeklyHours,r.pct,n(r.sched),n(r.hol),n(r.sick),n(r.vac),r.source==='actual'?'time_card':'estimate',n(r.worked),n(r.direct),'','','','','','',q(r.notes),'','']));
+    m.skus.forEach(s=>rows.push(['sku',m.mk,'','','','','','','','','','','',n(s.hrs),n(s.value),'','','',q(s.desc),s.qty,n(s.hrs),'']));
+    m.outside.forEach(o=>rows.push(['outside_client',m.mk,'','','','','','','','','','','',n(o.hours),n(o.revenue),'','','',q(o.client),q(o.notes),'',n(o.hours)]));
   });
-  timeOff.forEach(t=>rows.push(['time_off',t.startDate.slice(0,7),q(employees.find(e=>e.id===t.employeeId)?.name||''),'','','','','','','','',`${t.startDate} to ${t.endDate}`,'','','','','','',q(TO_TYPES[t.type]+(t.notes?' - '+t.notes:'')),n(t.hours),'','','']));
   dl(rows.map(r=>r.join(',')).join('\n'),`productivity_data_${addMonths(prodMonth,-11)}_to_${prodMonth}.csv`,'text/csv');
 }
 
@@ -1701,18 +1513,17 @@ async function downloadProdPDF(){
   try{
     const series=calcSeries(prodMonth,12);
     const cur=series[series.length-1],prev=series[series.length-2];
-    const slim=m=>({mk:m.mk,label:m.label,short:m.short,mtd:m.mtd,worked:m.tot.worked,off:m.tot.off,direct:m.tot.direct,
+    const slim=m=>({mk:m.mk,label:m.label,short:m.short,mtd:m.mtd,estimated:m.estimated,worked:m.tot.worked,leave:m.tot.sick+m.tot.vac,direct:m.tot.direct,
       earned:m.earned,shipped:m.shipped,eff:m.eff,roll3:m.roll3,perHr:m.perHr,
       earnedTracked:m.earnedTracked,earnedOutside:m.earnedOutside,revOutside:m.revOutside});
     const payload={type:'labor',
       company:settings.companyName,division:settings.divisionName,preparedBy:settings.preparedBy,
       generated:new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
       current:slim(cur),prior:slim(prev),series:series.map(slim),
-      staff:cur.emps.map(r=>({name:r.emp.name,role:r.emp.role,weekly:r.emp.weeklyHours,pct:r.pct,sched:r.sched,hol:r.hol,off:r.off,ot:r.ot,worked:r.worked,direct:r.direct,source:r.source})),
+      staff:cur.emps.map(r=>({name:r.emp.name,role:r.emp.role,weekly:r.emp.weeklyHours,pct:r.pct,sched:r.sched,hol:r.hol,sick:r.sick,vac:r.vac,worked:r.worked,direct:r.direct,source:r.source,notes:r.notes})),
       skus:cur.skus.slice(0,10).map(s=>({desc:s.desc,qty:s.qty,hrs:s.hrs,value:s.value})),
       noBom:cur.noBom.map(s=>s.desc),
-      outside:cur.outside.map(o=>({client:o.client,hours:o.hours,revenue:o.revenue,notes:o.notes})),
-      timeOff:timeOffInMonth(prodMonth).map(t=>({name:employees.find(e=>e.id===t.employeeId)?.name||'',start:t.startDate,end:t.endDate,hours:t.hours,type:TO_TYPES[t.type]||t.type,notes:t.notes}))};
+      outside:cur.outside.map(o=>({client:o.client,hours:o.hours,revenue:o.revenue,notes:o.notes})),};
     const res=await fetch('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok){let msg='Server error';try{msg=(await res.json()).error||msg;}catch(_){}throw new Error(msg);}
     const blob=await res.blob();
